@@ -1,15 +1,57 @@
-# dast_project
-## Динамический анализ безопасности (DAST) веб‑приложений
-Тематика охватывает автоматизированное обнаружение типичных классов уязвимостей согласно OWASP Top 10 - SQL‑инъекций, XSS, SSRF, открытых редиректов, небезопасной конфигурации заголовков и других - путём краулинга структуры приложения, генерации специально сформированных полезных нагрузок и интерпретации реакции сервера.
-## Функциональные требования
-1. Система должна автоматически обходить страницы веб‑приложения, извлекать ссылки, формы, JavaScript‑маршруты и API‑эндпоинты, строя граф структуры приложения.
-2. В системе должна поддерживается настройка глубины обхода и исключения определённых путей.
-3. Для каждого обнаруженного параметра (GET/POST, заголовки, cookie) система должна генерировать набор полезных нагрузок под конкретный класс уязвимостей.
-4. Система должна брать нагрузки из встроенных словарей, которые могут быть расширены пользователем.
-5. Сигнатурный анализ в системе должен искать в теле ответа и заголовках маркеры эксплуатации.
-6. С помощью эвристического анализа система должна искать разницу между базовым и аномальным ответами.
-7. Пользователь должен иметь возможность задавать цель, область сканирования, аутентификационные данные, глубину и ограничения по времени.
-8. В системе должна поддерживаться пауза и возобновление сканирования.
-9. По завершении сканирования система должна предоставлять возможность получения отчёта с перечнем найденных уязвимостей, их классификацией, доказательной базой и рекомендациями по устранению.
-10. Отчёт должен экспортироваться системой в PDF и JSON.
-11. Система должна поддерживать сессионные cookie, HTTP Basic Auth, OAuth Bearer‑токены и автоматическое прохождение форм логина.
+# DAST Analyzer
+
+![CI](https://gitlab.com/your-group/dast/badges/main/pipeline.svg)
+![Coverage](https://gitlab.com/your-group/dast/badges/main/coverage.svg)
+![Version](https://img.shields.io/badge/version-0.1.0-blue)
+
+Dynamic Application Security Testing tool for web applications.
+Detects OWASP Top 10 vulnerabilities via automated crawling and payload injection.
+
+## Quick Start
+
+```bash
+cp .env.example .env
+# Edit .env — set strong passwords and SECRET_KEY
+docker compose up -d
+```
+
+API docs available at `https://localhost/api/docs` (development mode only).
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend | Python 3.11 + FastAPI + SQLAlchemy |
+| Database | PostgreSQL 16 |
+| Queue | Redis 7 |
+| Frontend | React + Vite (TypeScript) |
+| Proxy | Nginx + TLS |
+| CI/CD | GitLab CI |
+
+## Documentation
+
+- [System Specs](docs/SYSTEM_SPECS.md)
+- [User Guide](docs/USER_SPECS.md)
+- [Deployment](docs/DEPLOY.md)
+- [Security](docs/SECURITY.md)
+
+## Development
+
+```bash
+cd backend
+pip install -r requirements.txt
+# Run with local .env
+uvicorn app.main:app --reload
+```
+
+```bash
+# Apply DB migrations
+alembic upgrade head
+
+# Create new migration after model changes
+alembic revision --autogenerate -m "description"
+```
+
+## License
+
+MIT
