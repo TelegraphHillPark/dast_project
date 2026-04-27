@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
+import Navbar from '../components/Navbar'
 
 interface UserItem {
   id: string
@@ -23,7 +23,7 @@ interface TokenItem {
 type Tab = 'users' | 'tokens'
 
 export default function AdminPage() {
-  const navigate = useNavigate()
+
   const [tab, setTab] = useState<Tab>('users')
 
   const [users, setUsers] = useState<UserItem[]>([])
@@ -62,10 +62,6 @@ export default function AdminPage() {
     setTokens(prev => prev.map(t => t.id === tokenId ? { ...t, is_active: false } : t))
   }
 
-  const nav: React.CSSProperties = {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '12px 24px', background: '#1e293b', borderBottom: '1px solid #334155',
-  }
   const btn: React.CSSProperties = {
     padding: '6px 14px', background: '#1e40af', color: '#fff',
     border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer',
@@ -81,10 +77,7 @@ export default function AdminPage() {
 
   return (
     <div>
-      <nav style={nav}>
-        <span style={{ fontWeight: 700 }}>Панель администратора</span>
-        <button style={btn} onClick={() => navigate('/dashboard')}>← Главная</button>
-      </nav>
+      <Navbar title="Панель администратора" backTo="/dashboard" backLabel="← Главная" />
 
       <main style={{ padding: 32 }}>
         <div style={{ marginBottom: 0 }}>

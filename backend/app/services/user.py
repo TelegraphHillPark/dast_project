@@ -66,7 +66,7 @@ async def upload_avatar(user: User, file: UploadFile, db: AsyncSession) -> str:
     if file.content_type not in allowed:
         raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Only JPEG/PNG/WebP/GIF allowed")
 
-    avatars_dir = os.path.join(settings.WORDLISTS_DIR, "..", "uploads", "avatars")
+    avatars_dir = "/app/uploads/avatars"
     os.makedirs(avatars_dir, exist_ok=True)
 
     ext = file.filename.rsplit(".", 1)[-1] if "." in file.filename else "jpg"
@@ -76,7 +76,7 @@ async def upload_avatar(user: User, file: UploadFile, db: AsyncSession) -> str:
     with open(path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    user.avatar_url = f"/uploads/avatars/{filename}"
+    user.avatar_url = f"/api/uploads/avatars/{filename}"
     return user.avatar_url
 
 
