@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.deps import get_current_user
+from app.core.limiter import limiter
 from app.core.security import create_pre_auth_token
 from app.database import get_db
 from app.models.user import User
@@ -24,13 +25,15 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=UserOut, status_code=201)
-async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/minute")
+async def register(request: Request, data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     user = await auth_svc.register_user(data, db)
     return UserOut.from_orm_user(user)
 
 
 @router.post("/login")
-async def login(data: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def login(request: Request, data: LoginRequest, db: AsyncSession = Depends(get_db)):
     user = await auth_svc.authenticate_user(data.email, data.password, db)
 
     if user.totp_secret:
@@ -41,7 +44,8 @@ async def login(data: LoginRequest, request: Request, db: AsyncSession = Depends
 
 
 @router.post("/2fa/verify", response_model=TokenResponse)
-async def verify_2fa(data: TOTPVerifyRequest, request: Request, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def verify_2fa(request: Request, data: TOTPVerifyRequest, db: AsyncSession = Depends(get_db)):
     return await auth_svc.complete_login_with_2fa(data.pre_auth_token, data.code, request, db)
 
 

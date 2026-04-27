@@ -5,8 +5,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import settings
+from app.core.limiter import limiter
 from app.database import engine, Base
 from app.middleware.logging import RequestLoggingMiddleware
 from app.routers import auth, scans, admin, wordlists, users
@@ -59,8 +63,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # ── Middleware (порядок важен: внешний → внутренний) ─────────────────────────
 
+app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 
 app.add_middleware(

@@ -18,7 +18,7 @@ export default function DashboardPage() {
   }
   const btn: React.CSSProperties = {
     padding: '6px 14px', background: '#1e40af', color: '#fff',
-    border: 'none', borderRadius: 6, fontSize: 13,
+    border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer',
   }
 
   return (
@@ -28,15 +28,15 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <span style={{ fontSize: 13, color: '#94a3b8' }}>{user?.username}</span>
           {user?.role === 'admin' && (
-            <button style={btn} onClick={() => navigate('/admin')}>Admin</button>
+            <button style={btn} onClick={() => navigate('/admin')}>Администратор</button>
           )}
-          <button style={{ ...btn, background: '#7f1d1d' }} onClick={handleLogout}>Logout</button>
+          <button style={{ ...btn, background: '#7f1d1d' }} onClick={handleLogout}>Выйти</button>
         </div>
       </nav>
 
       <main style={{ padding: 32 }}>
-        <h2 style={{ marginBottom: 24 }}>Scans</h2>
-        <p style={{ color: '#94a3b8' }}>No scans yet. Sprint 3 will add scan management here.</p>
+        <h2 style={{ marginBottom: 24 }}>Сканирования</h2>
+        <p style={{ color: '#94a3b8' }}>Сканирований пока нет. Управление сканами появится в Спринте 3.</p>
       </main>
     </div>
   )

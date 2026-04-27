@@ -120,3 +120,21 @@ async def admin_update_user(user_id: str, data: AdminUserUpdate, db: AsyncSessio
     if data.is_active is not None:
         user.is_active = data.is_active
     return user
+
+
+async def admin_list_all_tokens(db: AsyncSession) -> list[tuple]:
+    from app.models.user import User as UserModel
+    result = await db.execute(
+        select(APIToken, UserModel.username)
+        .join(UserModel, UserModel.id == APIToken.owner_id)
+        .order_by(APIToken.created_at.desc())
+    )
+    return result.all()
+
+
+async def admin_revoke_any_token(token_id: str, db: AsyncSession) -> None:
+    result = await db.execute(select(APIToken).where(APIToken.id == token_id))
+    token_obj = result.scalar_one_or_none()
+    if not token_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")
+    token_obj.is_active = False

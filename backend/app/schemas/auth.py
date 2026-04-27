@@ -75,3 +75,13 @@ class APITokenOut(BaseModel):
     created_at: str
 
     model_config = {"from_attributes": True}
+
+
+class AdminTokenOut(BaseModel):
+    id: str
+    owner_id: str
+    owner_username: str
+    name: str
+    is_active: bool
+    last_used_at: str | None
+    created_at: str
