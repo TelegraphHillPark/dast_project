@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -96,3 +97,10 @@ app.include_router(wordlists.router)
 @app.get("/health", tags=["system"])
 async def health():
     return {"status": "ok", "version": settings.APP_VERSION}
+
+
+# Раздача загруженных файлов (аватары и т.д.)
+import os as _os
+_uploads_dir = "/app/uploads"
+_os.makedirs(_uploads_dir, exist_ok=True)
+app.mount("/api/uploads", StaticFiles(directory=_uploads_dir), name="uploads")
