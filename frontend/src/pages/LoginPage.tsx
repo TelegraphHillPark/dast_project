@@ -30,7 +30,7 @@ export default function LoginPage() {
         await finalize(data.access_token, data.refresh_token)
       }
     } catch (err: any) {
-      setError(err.response?.data?.detail ?? 'Login failed')
+      setError(err.response?.data?.detail ?? 'Ошибка входа')
     } finally {
       setLoading(false)
     }
@@ -44,7 +44,7 @@ export default function LoginPage() {
       const { data } = await api.post('/auth/2fa/verify', { pre_auth_token: preAuthToken, code: totpCode })
       await finalize(data.access_token, data.refresh_token)
     } catch (err: any) {
-      setError(err.response?.data?.detail ?? '2FA verification failed')
+      setError(err.response?.data?.detail ?? 'Неверный код')
     } finally {
       setLoading(false)
     }
@@ -66,12 +66,12 @@ export default function LoginPage() {
   const input: React.CSSProperties = {
     width: '100%', padding: '10px 12px', marginBottom: 12,
     background: '#0f172a', border: '1px solid #334155', borderRadius: 6,
-    color: '#f1f5f9', fontSize: 14,
+    color: '#f1f5f9', fontSize: 14, boxSizing: 'border-box',
   }
   const btn: React.CSSProperties = {
     width: '100%', padding: '10px 0',
     background: '#2563eb', color: '#fff', border: 'none',
-    borderRadius: 6, fontSize: 15, fontWeight: 600,
+    borderRadius: 6, fontSize: 15, fontWeight: 600, cursor: 'pointer',
   }
 
   return (
@@ -80,24 +80,46 @@ export default function LoginPage() {
 
       {step === 'login' && (
         <form onSubmit={handleLogin}>
-          <input style={input} type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required />
-          <input style={input} type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required />
+          <input style={input} type="email" placeholder="Эл. почта" value={email} onChange={e => setEmail(e.target.value)} required />
+          <input style={input} type="password" placeholder="Пароль" value={password} onChange={e => setPassword(e.target.value)} required />
           {error && <p style={{ color: '#f87171', marginBottom: 12 }}>{error}</p>}
-          <button style={btn} type="submit" disabled={loading}>{loading ? 'Signing in…' : 'Sign In'}</button>
+          <button style={btn} type="submit" disabled={loading}>
+            {loading ? 'Вход…' : 'Войти'}
+          </button>
           <div style={{ marginTop: 16, textAlign: 'center', fontSize: 13, color: '#94a3b8' }}>
-            <a href="/api/auth/oauth/github" style={{ marginRight: 16 }}>GitHub</a>
-            <a href="/api/auth/oauth/google">Google</a>
+            <span>Войти через: </span>
+            <a href="/api/auth/oauth/github" style={{ marginRight: 12, color: '#94a3b8' }}>GitHub</a>
+            <a href="/api/auth/oauth/google" style={{ color: '#94a3b8' }}>Google</a>
           </div>
         </form>
       )}
 
       {step === '2fa' && (
         <form onSubmit={handle2FA}>
-          <p style={{ marginBottom: 16, color: '#94a3b8', fontSize: 14 }}>Enter the 6-digit code from your authenticator app.</p>
-          <input style={input} type="text" placeholder="000000" maxLength={6} value={totpCode} onChange={e => setTotpCode(e.target.value)} required autoFocus />
+          <p style={{ marginBottom: 16, color: '#94a3b8', fontSize: 14 }}>
+            Введите 6-значный код из приложения-аутентификатора.
+          </p>
+          <input
+            style={input}
+            type="text"
+            placeholder="000000"
+            maxLength={6}
+            value={totpCode}
+            onChange={e => setTotpCode(e.target.value)}
+            required
+            autoFocus
+          />
           {error && <p style={{ color: '#f87171', marginBottom: 12 }}>{error}</p>}
-          <button style={btn} type="submit" disabled={loading}>{loading ? 'Verifying…' : 'Verify'}</button>
-          <button type="button" onClick={() => setStep('login')} style={{ ...btn, background: 'transparent', border: '1px solid #334155', marginTop: 8 }}>Back</button>
+          <button style={btn} type="submit" disabled={loading}>
+            {loading ? 'Проверка…' : 'Подтвердить'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setStep('login')}
+            style={{ ...btn, background: 'transparent', border: '1px solid #334155', marginTop: 8 }}
+          >
+            Назад
+          </button>
         </form>
       )}
     </div>
