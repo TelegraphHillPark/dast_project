@@ -1,53 +1,53 @@
-# DAST Analyzer — System Specifications
+# DAST Analyzer — Системные спецификации
 
-## 1. Overview
+## 1. Обзор
 
-DAST Analyzer is an automated Dynamic Application Security Testing tool that crawls web applications, generates attack payloads, and detects vulnerabilities from the OWASP Top 10.
+DAST Analyzer — автоматизированный инструмент динамического анализа защищённости (Dynamic Application Security Testing), который обходит веб-приложения, генерирует атакующие полезные нагрузки и обнаруживает уязвимости из OWASP Top 10.
 
-**Version:** 0.2.0  
-**Stack:** Python 3.11 · FastAPI · PostgreSQL 16 · Redis 7 · React 18 · Nginx
+**Версия:** 0.2.0  
+**Стек:** Python 3.11 · FastAPI · PostgreSQL 16 · Redis 7 · React 18 · Nginx
 
 ---
 
-## 2. Architecture
+## 2. Архитектура
 
-### 2.1 Component Diagram
+### 2.1 Схема компонентов
 
 ```
-Browser / CLI
+Браузер / CLI
     │
     ▼
-Nginx (443 TLS / 80 redirect)
-    ├── Static files  → React SPA (frontend/dist)
-    └── /api/*        → FastAPI Backend (:8000)
+Nginx (443 TLS / редирект с 80)
+    ├── Статика       → React SPA (frontend/dist)
+    └── /api/*        → FastAPI Бэкенд (:8000)
                             │
                 ┌───────────┼────────────┐
                 ▼           ▼            ▼
-          PostgreSQL      Redis       Worker process
-          (state store)  (task queue) (Orchestrator + Crawler)
+          PostgreSQL      Redis       Воркер
+          (состояние)  (очередь)  (Оркестратор + Краулер)
 ```
 
-### 2.2 Component Responsibilities
+### 2.2 Обязанности компонентов
 
-| Component | Responsibility |
+| Компонент | Ответственность |
 |---|---|
-| **Nginx** | TLS termination, static file serving, reverse proxy to backend |
-| **FastAPI Backend** | REST API, authentication, user management, scan management |
-| **PostgreSQL** | Persistent state: users, sessions, scans, vulnerabilities, wordlists |
-| **Redis** | Scan task queue (`scan_queue` list), future pub/sub |
-| **Worker** | Dequeues scan tasks, runs Orchestrator, saves results to DB |
-| **Orchestrator** | Manages scan lifecycle (pending → running → finished/paused/failed) |
-| **Crawler** | Async HTTP traversal of target application |
-| **Auth Manager** | Applies target-app auth (cookie, Basic, Bearer, form login) |
-| **Payload Engine** | *(Sprint 4)* Generates attack payloads from wordlists |
-| **Analyzers** | *(Sprint 4)* Signature + heuristic vulnerability detection |
-| **Report Generator** | *(Sprint 5)* PDF and JSON report export |
+| **Nginx** | Завершение TLS, раздача статики, обратный прокси к бэкенду |
+| **FastAPI Бэкенд** | REST API, аутентификация, управление пользователями и сканами |
+| **PostgreSQL** | Постоянное хранение: пользователи, сессии, сканы, уязвимости, словари |
+| **Redis** | Очередь задач сканирования (`scan_queue` list), будущий pub/sub |
+| **Воркер** | Извлекает задачи из Redis, запускает Оркестратор, сохраняет результаты в БД |
+| **Оркестратор** | Управляет жизненным циклом скана (pending → running → finished/paused/failed) |
+| **Краулер** | Асинхронный HTTP-обход целевого приложения |
+| **Auth Manager** | Применяет аутентификацию к целевому приложению (cookie, Basic, Bearer, form) |
+| **Движок нагрузок** | *(Спринт 4)* Генерация атакующих нагрузок из словарей |
+| **Анализаторы** | *(Спринт 4)* Сигнатурное и эвристическое обнаружение уязвимостей |
+| **Генератор отчётов** | *(Спринт 5)* Экспорт отчётов в PDF и JSON |
 
 ---
 
-## 3. Database Schema
+## 3. Схема базы данных
 
-### 3.1 Entity-Relationship Summary
+### 3.1 Сводка отношений
 
 ```
 users ──< user_sessions
@@ -56,10 +56,10 @@ users ──< scans ──< vulnerabilities
 users ──< wordlists
 ```
 
-### 3.2 Tables
+### 3.2 Таблицы
 
 #### `users`
-| Column | Type | Notes |
+| Столбец | Тип | Примечания |
 |---|---|---|
 | id | VARCHAR(36) PK | UUIDv7 |
 | email | VARCHAR(255) UNIQUE | |
@@ -67,48 +67,48 @@ users ──< wordlists
 | hashed_password | TEXT | bcrypt |
 | role | ENUM(admin, user) | |
 | avatar_url | TEXT | |
-| totp_secret | TEXT | Encrypted TOTP seed |
+| totp_secret | TEXT | Зашифрованный TOTP-сид |
 | is_active | BOOLEAN | |
 | created_at | TIMESTAMPTZ | |
 | updated_at | TIMESTAMPTZ | |
 
 #### `user_sessions`
-| Column | Type | Notes |
+| Столбец | Тип | Примечания |
 |---|---|---|
 | id | VARCHAR(36) PK | |
 | user_id | FK → users.id CASCADE | |
-| token_hash | VARCHAR(64) | SHA-256 of refresh token |
+| token_hash | VARCHAR(64) | SHA-256 refresh-токена |
 | user_agent | TEXT | |
 | ip_address | VARCHAR(45) | IPv4/IPv6 |
 | is_active | BOOLEAN | |
 | created_at / expires_at | TIMESTAMPTZ | |
 
 #### `api_tokens`
-| Column | Type | Notes |
+| Столбец | Тип | Примечания |
 |---|---|---|
 | id | VARCHAR(36) PK | |
 | owner_id | FK → users.id CASCADE | |
-| name | VARCHAR(128) | Human label |
+| name | VARCHAR(128) | Метка |
 | token_hash | VARCHAR(64) | SHA-256 |
 | is_active | BOOLEAN | |
 | last_used_at | TIMESTAMPTZ | |
 | created_at | TIMESTAMPTZ | |
 
 #### `scans`
-| Column | Type | Notes |
+| Столбец | Тип | Примечания |
 |---|---|---|
 | id | VARCHAR(36) PK | UUIDv7 |
 | owner_id | FK → users.id CASCADE | |
 | target_url | VARCHAR(2048) | |
 | status | ENUM(pending, running, paused, finished, failed) | |
-| max_depth | INTEGER | Default 3 |
-| timeout_seconds | INTEGER | Default 3600 |
-| excluded_paths | JSON | Array of path prefixes |
-| config | JSON | Auth config + crawl_stats after run |
+| max_depth | INTEGER | По умолчанию 3 |
+| timeout_seconds | INTEGER | По умолчанию 3600 |
+| excluded_paths | JSON | Массив префиксов путей |
+| config | JSON | Конфиг аутентификации + crawl_stats после выполнения |
 | created_at / started_at / finished_at | TIMESTAMPTZ | |
 
 #### `vulnerabilities`
-| Column | Type | Notes |
+| Столбец | Тип | Примечания |
 |---|---|---|
 | id | VARCHAR(36) PK | |
 | scan_id | FK → scans.id CASCADE | |
@@ -116,74 +116,74 @@ users ──< wordlists
 | severity | ENUM(critical, high, medium, low, info) | |
 | url | VARCHAR(2048) | |
 | parameter | VARCHAR(255) | |
-| method | VARCHAR(10) | GET / POST / etc. |
-| payload | TEXT | Attack payload used |
-| evidence | JSON | Request/response snippets |
+| method | VARCHAR(10) | GET / POST / и др. |
+| payload | TEXT | Использованная нагрузка |
+| evidence | JSON | Фрагменты запроса/ответа |
 | recommendation | TEXT | |
 | created_at | TIMESTAMPTZ | |
 
 #### `wordlists`
-| Column | Type | Notes |
+| Столбец | Тип | Примечания |
 |---|---|---|
 | id | VARCHAR(36) PK | |
 | owner_id | FK → users.id CASCADE | |
 | name | VARCHAR(128) | |
-| file_path | TEXT | Path on filesystem |
+| file_path | TEXT | Путь на файловой системе |
 | size_bytes | BIGINT | |
 | is_builtin | BOOLEAN | |
 | created_at | TIMESTAMPTZ | |
 
 ---
 
-## 4. REST API Specification
+## 4. Спецификация REST API
 
-Base URL: `/api`  
-Authentication: `Authorization: Bearer <JWT>` or `X-API-Key: <token>`
+Базовый URL: `/api`  
+Аутентификация: `Authorization: Bearer <JWT>` или `X-API-Key: <токен>`
 
-### 4.1 Authentication (`/api/auth`)
+### 4.1 Аутентификация (`/api/auth`)
 
-| Method | Endpoint | Description |
+| Метод | Эндпоинт | Описание |
 |---|---|---|
-| POST | `/auth/register` | Register new user (5/min rate limit) |
-| POST | `/auth/login` | Login; returns pre_auth_token if 2FA enabled (10/min) |
-| POST | `/auth/2fa/setup` | Generate TOTP secret + QR code URI |
-| POST | `/auth/2fa/enable` | Activate 2FA with TOTP code |
-| POST | `/auth/2fa/disable` | Deactivate 2FA |
-| POST | `/auth/2fa/verify` | Verify TOTP code (10/min) |
-| POST | `/auth/refresh` | Refresh access token |
-| POST | `/auth/logout` | Revoke session |
-| GET | `/auth/oauth/github` | Redirect to GitHub OAuth |
-| GET | `/auth/oauth/github/callback` | GitHub OAuth callback |
-| GET | `/auth/oauth/google` | Redirect to Google OAuth |
-| GET | `/auth/oauth/google/callback` | Google OAuth callback |
+| POST | `/auth/register` | Регистрация нового пользователя (лимит 5/мин) |
+| POST | `/auth/login` | Вход; возвращает `pre_auth_token`, если включена 2FA (лимит 10/мин) |
+| POST | `/auth/2fa/setup` | Генерация TOTP-секрета и URI QR-кода |
+| POST | `/auth/2fa/enable` | Активация 2FA по TOTP-коду |
+| POST | `/auth/2fa/disable` | Деактивация 2FA |
+| POST | `/auth/2fa/verify` | Проверка TOTP-кода (лимит 10/мин) |
+| POST | `/auth/refresh` | Обновление access-токена |
+| POST | `/auth/logout` | Отзыв сессии |
+| GET | `/auth/oauth/github` | Редирект на OAuth GitHub |
+| GET | `/auth/oauth/github/callback` | Callback OAuth GitHub |
+| GET | `/auth/oauth/google` | Редирект на OAuth Google |
+| GET | `/auth/oauth/google/callback` | Callback OAuth Google |
 
-### 4.2 Users (`/api/users`)
+### 4.2 Пользователи (`/api/users`)
 
-| Method | Endpoint | Description |
+| Метод | Эндпоинт | Описание |
 |---|---|---|
-| GET | `/users/me` | Current user profile |
-| PATCH | `/users/me` | Update username/email |
-| POST | `/users/me/change-password` | Change password |
-| POST | `/users/me/avatar` | Upload avatar (JPEG/PNG/WebP/GIF) |
-| GET | `/users/me/sessions` | List active sessions |
-| DELETE | `/users/me/sessions/{id}` | Revoke session |
-| GET | `/users/me/tokens` | List API tokens |
-| POST | `/users/me/tokens` | Create API token |
-| DELETE | `/users/me/tokens/{id}` | Revoke API token |
+| GET | `/users/me` | Профиль текущего пользователя |
+| PATCH | `/users/me` | Обновление имени пользователя / email |
+| POST | `/users/me/change-password` | Смена пароля |
+| POST | `/users/me/avatar` | Загрузка аватара (JPEG/PNG/WebP/GIF) |
+| GET | `/users/me/sessions` | Список активных сессий |
+| DELETE | `/users/me/sessions/{id}` | Отзыв сессии |
+| GET | `/users/me/tokens` | Список API-токенов |
+| POST | `/users/me/tokens` | Создание API-токена |
+| DELETE | `/users/me/tokens/{id}` | Отзыв API-токена |
 
-### 4.3 Scans (`/api/scans`)
+### 4.3 Сканирования (`/api/scans`)
 
-| Method | Endpoint | Description |
+| Метод | Эндпоинт | Описание |
 |---|---|---|
-| POST | `/scans` | Create and enqueue scan |
-| GET | `/scans` | List user's scans |
-| GET | `/scans/{id}` | Scan detail with vulnerabilities and crawl stats |
-| POST | `/scans/{id}/pause` | Pause running scan |
-| POST | `/scans/{id}/resume` | Resume paused scan (re-enqueues) |
-| GET | `/scans/{id}/report` | JSON vulnerability report *(Sprint 5)* |
-| GET | `/scans/{id}/report.pdf` | PDF vulnerability report *(Sprint 5)* |
+| POST | `/scans` | Создание и постановка скана в очередь |
+| GET | `/scans` | Список сканов пользователя |
+| GET | `/scans/{id}` | Детали скана: уязвимости и статистика краулера |
+| POST | `/scans/{id}/pause` | Пауза выполняющегося скана |
+| POST | `/scans/{id}/resume` | Возобновление приостановленного скана (повторная постановка в очередь) |
+| GET | `/scans/{id}/report` | JSON-отчёт об уязвимостях *(Спринт 5)* |
+| GET | `/scans/{id}/report.pdf` | PDF-отчёт об уязвимостях *(Спринт 5)* |
 
-**POST `/scans` request body:**
+**Тело запроса POST `/scans`:**
 ```json
 {
   "target_url": "https://example.com",
@@ -203,60 +203,60 @@ Authentication: `Authorization: Bearer <JWT>` or `X-API-Key: <token>`
 }
 ```
 
-### 4.4 Admin (`/api/admin`) — admin role required
+### 4.4 Администрирование (`/api/admin`) — требуется роль admin
 
-| Method | Endpoint | Description |
+| Метод | Эндпоинт | Описание |
 |---|---|---|
-| GET | `/admin/users` | List all users |
-| PATCH | `/admin/users/{id}` | Update user role / active status |
-| GET | `/admin/sessions/{user_id}` | List user sessions |
-| DELETE | `/admin/sessions/{id}` | Deactivate session |
-| GET | `/admin/tokens` | List all API tokens |
-| DELETE | `/admin/tokens/{id}` | Revoke any API token |
+| GET | `/admin/users` | Список всех пользователей |
+| PATCH | `/admin/users/{id}` | Изменение роли / статуса пользователя |
+| GET | `/admin/sessions/{user_id}` | Список сессий пользователя |
+| DELETE | `/admin/sessions/{id}` | Деактивация сессии |
+| GET | `/admin/tokens` | Список всех API-токенов |
+| DELETE | `/admin/tokens/{id}` | Отзыв любого API-токена |
 
-### 4.5 Wordlists (`/api/wordlists`) — *(Sprint 4)*
+### 4.5 Словари (`/api/wordlists`) — *(Спринт 4)*
 
-| Method | Endpoint | Description |
+| Метод | Эндпоинт | Описание |
 |---|---|---|
-| POST | `/wordlists` | Upload wordlist (.txt / .json, up to 1 GB) |
-| GET | `/wordlists` | List available wordlists |
+| POST | `/wordlists` | Загрузка словаря (.txt / .json, до 1 ГБ) |
+| GET | `/wordlists` | Список доступных словарей |
 
 ---
 
-## 5. Crawler Architecture
+## 5. Архитектура краулера
 
-### 5.1 Async Crawler (`app/crawler/crawler.py`)
+### 5.1 Асинхронный краулер (`app/crawler/crawler.py`)
 
-- **HTTP client:** `httpx.AsyncClient` with configurable timeout
-- **HTML parsing:** BeautifulSoup4 + lxml
-- **Link extraction:** `<a href>`, `<link href>`, `<form action>`
-- **Form extraction:** all `<form>` elements with input field metadata
-- **JS route extraction:** regex scan for path literals in `fetch()`, `axios()`, `href:`
-- **Scope control:** same-origin only; excluded_paths prefix matching
-- **Depth control:** BFS with configurable max_depth (1–10)
-- **Stop support:** `asyncio.Event` checked before each URL
+- **HTTP-клиент:** `httpx.AsyncClient` с настраиваемым таймаутом
+- **Парсинг HTML:** BeautifulSoup4 + lxml
+- **Извлечение ссылок:** `<a href>`, `<link href>`, `<form action>`
+- **Извлечение форм:** все элементы `<form>` с метаданными полей ввода
+- **Извлечение JS-маршрутов:** regex-поиск строковых литералов путей в `fetch()`, `axios()`, `href:`
+- **Контроль области:** только тот же origin; сравнение по префиксу excluded_paths
+- **Контроль глубины:** BFS с настраиваемым max_depth (1–10)
+- **Поддержка остановки:** `asyncio.Event` проверяется перед каждым URL
 
 ### 5.2 Auth Manager (`app/crawler/auth_manager.py`)
 
-| Strategy | Mechanism |
+| Стратегия | Механизм |
 |---|---|
-| `none` | No authentication |
-| `cookie` | Pre-configured `Cookie` header |
-| `basic` | HTTP Basic Auth via httpx |
-| `bearer` | `Authorization: Bearer` header |
-| `form` | POST to login_url, session cookies auto-captured |
+| `none` | Без аутентификации |
+| `cookie` | Предварительно настроенный заголовок `Cookie` |
+| `basic` | HTTP Basic Auth через httpx |
+| `bearer` | Заголовок `Authorization: Bearer` |
+| `form` | POST на login_url, сессионные cookie захватываются автоматически |
 
-### 5.3 Orchestrator (`app/crawler/orchestrator.py`)
+### 5.3 Оркестратор (`app/crawler/orchestrator.py`)
 
-State transitions:
+Переходы состояний:
 ```
 pending → running → finished
-                 → paused   (stop_event set by worker)
-                 → failed   (exception or timeout)
-paused  → pending → running (re-enqueued via resume endpoint)
+                 → paused   (stop_event выставлен воркером)
+                 → failed   (исключение или таймаут)
+paused  → pending → running (повторная постановка в очередь через /resume)
 ```
 
-After crawl, `scan.config` is updated with:
+После обхода `scan.config` обновляется:
 ```json
 {
   "crawl_stats": {
@@ -270,27 +270,27 @@ After crawl, `scan.config` is updated with:
 }
 ```
 
-### 5.4 Worker (`app/worker.py`)
+### 5.4 Воркер (`app/worker.py`)
 
-- Polls Redis `scan_queue` (BLPOP with 2s timeout)
-- Spawns `asyncio.Task` per scan → `ScanOrchestrator.run()`
-- `check_pause_signals()` queries DB each cycle; calls `orch.stop()` when status = paused
+- Опрашивает Redis `scan_queue` (BLPOP с таймаутом 2 с)
+- Создаёт `asyncio.Task` для каждого скана → `ScanOrchestrator.run()`
+- `check_pause_signals()` запрашивает БД в каждом цикле; вызывает `orch.stop()`, если `status == paused`
 
 ---
 
-## 6. Security Architecture
+## 6. Архитектура безопасности
 
-### 6.1 Authentication & Authorization
+### 6.1 Аутентификация и авторизация
 
-- **JWT:** access token (60 min) + refresh token (30 days), stored in `user_sessions`
-- **API Key:** SHA-256 hashed, header `X-API-Key`
-- **2FA:** TOTP (RFC 6238), PyOTP, QR via `otpauth://` URI
-- **OAuth:** GitHub and Google via Authlib
-- **Role-based access:** `user` / `admin`; admin routes guarded by `require_admin` dependency
+- **JWT:** access-токен (60 мин) + refresh-токен (30 дней), хранятся в `user_sessions`
+- **API-ключ:** хешируется SHA-256, передаётся в заголовке `X-API-Key`
+- **2FA:** TOTP (RFC 6238), PyOTP, QR через URI `otpauth://`
+- **OAuth:** GitHub и Google через Authlib
+- **Ролевой доступ:** `user` / `admin`; admin-маршруты защищены зависимостью `require_admin`
 
-### 6.2 HTTP Security Headers (Nginx)
+### 6.2 HTTP-заголовки безопасности (Nginx)
 
-| Header | Value |
+| Заголовок | Значение |
 |---|---|
 | `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` |
 | `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'unsafe-inline'` |
@@ -298,83 +298,83 @@ After crawl, `scan.config` is updated with:
 | `X-Content-Type-Options` | `nosniff` |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` |
 
-### 6.3 Rate Limiting (SlowAPI)
+### 6.3 Ограничение запросов (SlowAPI)
 
-| Endpoint | Limit |
+| Эндпоинт | Лимит |
 |---|---|
-| `POST /auth/register` | 5 / minute |
-| `POST /auth/login` | 10 / minute |
-| `POST /auth/2fa/verify` | 10 / minute |
-| All other endpoints | 60 / minute (default) |
+| `POST /auth/register` | 5 / минута |
+| `POST /auth/login` | 10 / минута |
+| `POST /auth/2fa/verify` | 10 / минута |
+| Все остальные эндпоинты | 60 / минута (по умолчанию) |
 
-### 6.4 Request Tracing
+### 6.4 Трассировка запросов
 
-Every request is assigned a UUIDv7 `X-Request-ID` header and logged with timestamp, method, path, status code, and duration.
-
----
-
-## 7. CI/CD Pipeline (GitHub Actions)
-
-File: `.github/workflows/ci.yml`
-
-| Stage | Trigger | Jobs |
-|---|---|---|
-| Lint | Push / PR (path filter) | flake8 + mypy (backend), ESLint (frontend) |
-| SAST | Push to main / PR | SonarQube Scanner |
-| Test | Push / PR (path filter) | pytest + postgres + redis services |
-| Build | `git push --tags v*` | Docker build → push to ghcr.io |
-| Trivy | After build | Container vulnerability scan (HIGH/CRITICAL fail) |
-| Deploy | After trivy | SSH → docker compose pull + up + alembic upgrade |
-
-Secrets required: `SONAR_TOKEN`, `SONAR_HOST_URL`, `SSH_PRIVATE_KEY`, `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH`
+Каждому запросу присваивается UUIDv7 в заголовке `X-Request-ID`; логируется время, метод, путь, код ответа и длительность.
 
 ---
 
-## 8. Deployment
+## 7. CI/CD (GitHub Actions)
 
-### 8.1 Docker Compose Services
+Файл: `.github/workflows/ci.yml`
 
-| Service | Image | Port |
+| Этап | Триггер | Джобы |
 |---|---|---|
-| `db` | postgres:16-alpine | internal |
-| `redis` | redis:7-alpine | internal |
-| `backend` | custom (./backend) | 8000 (exposed) |
+| Линтинг | Push / PR (фильтр путей) | flake8 + mypy (бэкенд), ESLint (фронтенд) |
+| SAST | Push в main / PR | SonarQube Scanner |
+| Тесты | Push / PR (фильтр путей) | pytest + сервисы postgres и redis |
+| Сборка | `git push --tags v*` | Docker build → push на ghcr.io |
+| Trivy | После сборки | Сканирование контейнера (HIGH/CRITICAL = провал) |
+| Деплой | После Trivy | SSH → docker compose pull + up + alembic upgrade |
+
+Необходимые секреты: `SONAR_TOKEN`, `SONAR_HOST_URL`, `SSH_PRIVATE_KEY`, `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH`
+
+---
+
+## 8. Развёртывание
+
+### 8.1 Сервисы Docker Compose
+
+| Сервис | Образ | Порт |
+|---|---|---|
+| `db` | postgres:16-alpine | внутренний |
+| `redis` | redis:7-alpine | внутренний |
+| `backend` | custom (./backend) | 8000 (проброшен) |
 | `worker` | custom (./backend) | — |
 | `nginx` | custom (nginx:1.27-alpine) | 80, 443 |
 
-### 8.2 Environment Variables
+### 8.2 Переменные окружения
 
-| Variable | Required | Description |
+| Переменная | Обязательна | Описание |
 |---|---|---|
-| `SECRET_KEY` | Yes | JWT signing key (32+ chars) |
-| `DATABASE_URL` | Yes | `postgresql+asyncpg://user:pass@db:5432/dast` |
-| `REDIS_URL` | Yes | `redis://:pass@redis:6379/0` |
-| `POSTGRES_PASSWORD` | Yes | PostgreSQL password |
-| `REDIS_PASSWORD` | Yes | Redis password |
-| `ALLOWED_ORIGINS` | No | CORS origins, comma-separated |
-| `ENVIRONMENT` | No | `development` enables Swagger UI |
-| `GITHUB_CLIENT_ID/SECRET` | No | GitHub OAuth |
-| `GOOGLE_CLIENT_ID/SECRET` | No | Google OAuth |
+| `SECRET_KEY` | Да | Ключ подписи JWT (32+ символа) |
+| `DATABASE_URL` | Да | `postgresql+asyncpg://user:pass@db:5432/dast` |
+| `REDIS_URL` | Да | `redis://:pass@redis:6379/0` |
+| `POSTGRES_PASSWORD` | Да | Пароль PostgreSQL |
+| `REDIS_PASSWORD` | Да | Пароль Redis |
+| `ALLOWED_ORIGINS` | Нет | CORS-источники через запятую |
+| `ENVIRONMENT` | Нет | `development` включает Swagger UI |
+| `GITHUB_CLIENT_ID/SECRET` | Нет | OAuth GitHub |
+| `GOOGLE_CLIENT_ID/SECRET` | Нет | OAuth Google |
 
-### 8.3 Minimum Server Requirements
+### 8.3 Минимальные требования к серверу
 
-| Parameter | Minimum | Recommended |
+| Параметр | Минимум | Рекомендуется |
 |---|---|---|
-| OS | Ubuntu 22.04 LTS | Ubuntu 24.04 LTS |
+| ОС | Ubuntu 22.04 LTS | Ubuntu 24.04 LTS |
 | CPU | 2 vCPU | 4 vCPU |
-| RAM | 4 GB | 8 GB |
-| Disk | 20 GB SSD | 50 GB SSD |
-| Port | 443 (HTTPS) | 443 + 80 |
+| RAM | 4 ГБ | 8 ГБ |
+| Диск | 20 ГБ SSD | 50 ГБ SSD |
+| Порты | 443 (HTTPS) | 443 + 80 |
 
 ---
 
-## 9. Sprint Roadmap
+## 9. Дорожная карта спринтов
 
-| Sprint | Scope | Status |
+| Спринт | Содержание | Статус |
 |---|---|---|
-| 1 | Infrastructure, DB schema, FastAPI skeleton, Nginx, CI/CD | ✅ Done |
-| 2 | Auth (login/2FA/OAuth), Admin panel, Rate limiting, Alembic migration | ✅ Done |
-| 3 | Async Crawler, Auth Manager, Scan API, Worker, Scan UI | ✅ Done |
-| 4 | Payload Engine, wordlists, Signature/Heuristic analyzers, Scan progress UI | ⬜ Pending |
-| 5 | PDF/JSON reports, Report API, Report UI, Documentation | ⬜ Pending |
-| 6 | Unit/integration tests, DVWA testing, final deployment, comparison analysis | ⬜ Pending |
+| 1 | Инфраструктура, схема БД, скелет FastAPI, Nginx, CI/CD | ✅ Выполнен |
+| 2 | Аутентификация (вход/2FA/OAuth), панель администратора, rate limiting, миграции Alembic | ✅ Выполнен |
+| 3 | Асинхронный краулер, Auth Manager, Scan API, воркер, UI сканирований | ✅ Выполнен |
+| 4 | Движок нагрузок, словари, сигнатурный/эвристический анализаторы, прогресс-бар скана | ⬜ Планируется |
+| 5 | PDF/JSON-отчёты, Report API, UI отчётов, документация | ⬜ Планируется |
+| 6 | Юнит/интеграционные тесты, тестирование на DVWA, финальный деплой, сравнительный анализ | ⬜ Планируется |

@@ -1,71 +1,70 @@
 # DAST Analyzer
 
-![CI](https://gitlab.com/your-group/dast/badges/main/pipeline.svg)
-![Coverage](https://gitlab.com/your-group/dast/badges/main/coverage.svg)
-![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![CI](https://github.com/TelegraphHillPark/dast_project/actions/workflows/ci.yml/badge.svg)
+![Version](https://img.shields.io/badge/version-0.2.0-blue)
 
-Dynamic Application Security Testing tool for web applications.  
-Detects OWASP Top 10 vulnerabilities via automated crawling and payload injection.
+Инструмент динамического анализа защищённости веб-приложений (DAST).  
+Автоматически обходит приложение, обнаруживает уязвимости из OWASP Top 10 посредством инъекции полезных нагрузок.
 
-## Features
+## Возможности
 
-- Automated web crawler — links, forms, JS routes, API endpoints
-- Payload engine — built-in wordlists for SQLi, XSS, SSRF, Open Redirect, Header Injection
-- Signature & heuristic analyzers
-- Scan management — pause, resume, configurable depth and timeouts
-- PDF and JSON reports with OWASP Top 10 classification
-- Authentication — login/password, 2FA (TOTP), OAuth via GitHub and Google
-- Role-based access — admin / user
-- Admin panel — user management, role assignment, session deactivation, API token management
-- REST API protected by API keys with rate limiting
-- Request tracing via UUIDv7 Request ID
+- Асинхронный краулер — ссылки, формы, JS-маршруты, API-эндпоинты
+- Движок полезных нагрузок — встроенные словари для SQLi, XSS, SSRF, Open Redirect, Header Injection *(Спринт 4)*
+- Сигнатурный и эвристический анализаторы *(Спринт 4)*
+- Управление сканированием — пауза, возобновление, настройка глубины и таймаутов
+- Отчёты в форматах PDF и JSON по классификации OWASP Top 10 *(Спринт 5)*
+- Аутентификация — логин/пароль, двухфакторная (TOTP), OAuth через GitHub и Google
+- Разграничение ролей — admin / user
+- Панель администратора — управление пользователями, назначение ролей, управление сессиями и API-токенами
+- REST API с защитой API-ключами и ограничением запросов (rate limiting)
+- Трассировка запросов через UUIDv7 Request ID
 
-## Tech Stack
+## Стек технологий
 
-| Layer | Technology |
-|-------|-----------|
-| Backend | Python 3.11 + FastAPI + SQLAlchemy 2.0 |
-| Database | PostgreSQL 16 |
-| Queue | Redis 7 |
-| Frontend | React 18 + Vite (TypeScript) |
-| Proxy | Nginx + TLS |
-| CI/CD | GitLab CI (lint → SAST → test → build → Trivy → deploy) |
+| Слой | Технология |
+|------|-----------|
+| Бэкенд | Python 3.11 + FastAPI + SQLAlchemy 2.0 |
+| База данных | PostgreSQL 16 |
+| Очередь | Redis 7 |
+| Фронтенд | React 18 + Vite (TypeScript) |
+| Прокси | Nginx + TLS |
+| CI/CD | GitHub Actions (lint → test → build → deploy) |
 
 ---
 
-## Prerequisites
+## Требования
 
 - [Docker](https://docs.docker.com/get-docker/) + Docker Compose v2
-- [Node.js 20+](https://nodejs.org/) (LTS) with npm — for building the frontend
+- [Node.js 20+](https://nodejs.org/) (LTS) с npm — для сборки фронтенда
 
 ---
 
-## Quick Start
+## Быстрый старт
 
-### 1. Clone the repository
+### 1. Клонировать репозиторий
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/TelegraphHillPark/dast_project.git
 cd dast_project
 ```
 
-### 2. Configure environment
+### 2. Настроить окружение
 
 ```bash
 cp .env.example .env
 ```
 
-Open `.env` and fill in the required values:
+Открыть `.env` и заполнить обязательные переменные:
 
 ```env
-POSTGRES_PASSWORD=your_strong_password
-REDIS_PASSWORD=your_redis_password
-SECRET_KEY=at_least_32_random_characters_here
-ALLOWED_ORIGINS=https://your-domain.com
+POSTGRES_PASSWORD=надёжный_пароль
+REDIS_PASSWORD=пароль_redis
+SECRET_KEY=минимум_32_случайных_символа
+ALLOWED_ORIGINS=https://ваш-домен.com
 ENVIRONMENT=production
 ```
 
-OAuth (optional — leave empty to disable):
+OAuth (опционально — оставить пустым для отключения):
 
 ```env
 GITHUB_CLIENT_ID=
@@ -74,9 +73,9 @@ GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 ```
 
-### 3. Build the frontend
+### 3. Собрать фронтенд
 
-The Nginx image copies the compiled frontend at build time, so build it first:
+Образ Nginx копирует скомпилированный фронтенд при сборке, поэтому его нужно собрать заранее:
 
 ```bash
 cd frontend
@@ -85,54 +84,54 @@ npm run build
 cd ..
 ```
 
-### 4. Start all services
+### 4. Запустить все сервисы
 
 ```bash
 docker compose up --build -d
 ```
 
-This starts: PostgreSQL, Redis, FastAPI backend, background worker, and Nginx.
+Запускаются: PostgreSQL, Redis, FastAPI бэкенд, фоновый воркер и Nginx.
 
-### 5. Apply database migrations
+### 5. Применить миграции базы данных
 
 ```bash
 docker compose exec backend alembic upgrade head
 ```
 
-### 6. Verify
+### 6. Проверить работоспособность
 
 ```bash
 curl -k https://localhost/health
-# {"status":"ok","version":"0.1.0"}
+# {"status":"ok","version":"0.2.0"}
 ```
 
-The application is available at **https://localhost**.  
-API docs (development mode only): `https://localhost/api/docs`
+Приложение доступно по адресу **https://localhost**.  
+Документация API (только в режиме разработки): `https://localhost/api/docs`
 
 ---
 
-## Development Setup
+## Настройка для разработки
 
-### Backend
+### Бэкенд
 
 ```bash
 cd backend
 pip install -r requirements.txt
 
-# Copy and configure .env
+# Скопировать и настроить .env
 cp ../.env.example .env
-# Set ENVIRONMENT=development, DATABASE_URL and REDIS_URL pointing to local services
+# Установить ENVIRONMENT=development, DATABASE_URL и REDIS_URL, указывающие на локальные сервисы
 
-# Run migrations
+# Применить миграции
 alembic upgrade head
 
-# Start with auto-reload
+# Запустить с автоперезагрузкой
 uvicorn app.main:app --reload
 ```
 
-In development mode (`ENVIRONMENT=development`) tables are also created automatically via SQLAlchemy on startup.
+В режиме разработки (`ENVIRONMENT=development`) таблицы также создаются автоматически через SQLAlchemy при старте.
 
-### Frontend
+### Фронтенд
 
 ```bash
 cd frontend
@@ -140,57 +139,73 @@ npm install
 npm run dev
 ```
 
-Vite dev server starts at `http://localhost:5173` and proxies `/api` requests to the backend.
+Dev-сервер Vite стартует на `http://localhost:5173` и проксирует запросы `/api` на бэкенд.
 
-### Useful Alembic commands
+### Полезные команды Alembic
 
 ```bash
-# Apply all migrations
+# Применить все миграции
 alembic upgrade head
 
-# Create a new migration after model changes
-alembic revision --autogenerate -m "description"
+# Создать новую миграцию после изменений моделей
+alembic revision --autogenerate -m "описание"
 
-# Roll back last migration
+# Откатить последнюю миграцию
 alembic downgrade -1
 ```
 
 ---
 
-## Useful Docker Commands
+## Полезные команды Docker
 
 ```bash
-# View backend logs
+# Просмотр логов бэкенда
 docker compose logs -f backend
 
-# Stop all services
+# Просмотр логов воркера
+docker compose logs -f worker
+
+# Остановить все сервисы
 docker compose down
 
-# Stop and remove all data (caution!)
+# Остановить и удалить все данные (осторожно!)
 docker compose down -v
 ```
 
 ---
 
-## TLS Certificate
+## TLS-сертификат
 
-By default Nginx generates a **self-signed certificate** — browsers will show a warning.  
-For production, replace it with a real certificate:
+По умолчанию Nginx генерирует **самоподписанный сертификат** — браузеры покажут предупреждение.  
+Для продакшена заменить на реальный:
 
-1. Place your `server.crt` and `server.key` into `docker/nginx/certs/`
-2. Rebuild the Nginx image: `docker compose build nginx && docker compose up -d nginx`
-
----
-
-## Documentation
-
-- [System Specs](docs/SYSTEM_SPECS.md)
-- [User Guide](docs/USER_SPECS.md)
-- [Deployment Guide](docs/DEPLOY.md)
-- [Security](docs/SECURITY.md)
+1. Поместить `server.crt` и `server.key` в `docker/nginx/certs/`
+2. Пересобрать образ Nginx: `docker compose build nginx && docker compose up -d nginx`
 
 ---
 
-## License
+## Назначение роли администратора
+
+Первый администратор создаётся напрямую через БД:
+
+```bash
+docker compose exec db psql -U dast dast \
+  -c "UPDATE users SET role='admin' WHERE email='ваш@email.com';"
+```
+
+После этого через панель администратора (`/admin`) или API (`PATCH /api/admin/users/{id}`) можно повышать роли других пользователей.
+
+---
+
+## Документация
+
+- [Системные спецификации](docs/SYSTEM_SPECS.md)
+- [Руководство пользователя](docs/USER_SPECS.md)
+- [Руководство по развёртыванию](docs/DEPLOY.md)
+- [Безопасность](docs/SECURITY.md)
+
+---
+
+## Лицензия
 
 MIT
