@@ -37,3 +37,6 @@ Thumbs.db
 # Wordlists (могут быть большими)
 backend/wordlists/*.txt
 backend/wordlists/*.json
+
+.claude/
+COMMIT_MSG.txt
