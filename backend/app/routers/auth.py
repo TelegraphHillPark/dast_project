@@ -112,29 +112,7 @@ async def oauth_github_redirect():
 @router.get("/oauth/github/callback")
 async def oauth_github_callback(code: str, request: Request, db: AsyncSession = Depends(get_db)):
     tokens = await auth_svc.oauth_github_callback(code, request, db)
-    base = str(request.base_url).rstrip("/")
+    frontend = settings.FRONTEND_URL.rstrip("/")
     return RedirectResponse(
-        f"{base}/oauth?access_token={tokens.access_token}&refresh_token={tokens.refresh_token}"
-    )
-
-
-@router.get("/oauth/google")
-async def oauth_google_redirect(request: Request):
-    redirect_uri = f"{request.base_url}api/auth/oauth/google/callback"
-    url = (
-        f"https://accounts.google.com/o/oauth2/v2/auth"
-        f"?client_id={settings.GOOGLE_CLIENT_ID}"
-        f"&redirect_uri={redirect_uri}"
-        f"&response_type=code"
-        f"&scope=openid%20email%20profile"
-    )
-    return RedirectResponse(url)
-
-
-@router.get("/oauth/google/callback")
-async def oauth_google_callback(code: str, request: Request, db: AsyncSession = Depends(get_db)):
-    tokens = await auth_svc.oauth_google_callback(code, request, db)
-    base = str(request.base_url).rstrip("/")
-    return RedirectResponse(
-        f"{base}/oauth?access_token={tokens.access_token}&refresh_token={tokens.refresh_token}"
+        f"{frontend}/oauth?access_token={tokens.access_token}&refresh_token={tokens.refresh_token}"
     )

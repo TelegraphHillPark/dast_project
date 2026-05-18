@@ -172,29 +172,6 @@ async def oauth_github_callback(code: str, request: Request, db: AsyncSession) -
     return await _get_or_create_oauth_user(primary_email, gh_user.get("login", ""), request, db)
 
 
-async def oauth_google_callback(code: str, request: Request, db: AsyncSession) -> TokenResponse:
-    async with httpx.AsyncClient() as client:
-        token_resp = await client.post(
-            "https://oauth2.googleapis.com/token",
-            data={
-                "client_id": settings.GOOGLE_CLIENT_ID,
-                "client_secret": settings.GOOGLE_CLIENT_SECRET,
-                "code": code,
-                "grant_type": "authorization_code",
-                "redirect_uri": f"{request.base_url}api/auth/oauth/google/callback",
-            },
-        )
-        token_data = token_resp.json()
-        if "error" in token_data:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Google OAuth failed")
-
-        user_resp = await client.get(
-            "https://www.googleapis.com/oauth2/v2/userinfo",
-            headers={"Authorization": f"Bearer {token_data['access_token']}"},
-        )
-        g_user = user_resp.json()
-
-    return await _get_or_create_oauth_user(g_user["email"], g_user.get("name", "").replace(" ", "_"), request, db)
 
 
 async def _get_or_create_oauth_user(email: str, suggested_username: str, request: Request, db: AsyncSession) -> TokenResponse:

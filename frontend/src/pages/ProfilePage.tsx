@@ -1,10 +1,18 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { api } from '../api/client'
 import { useAuthStore } from '../store/auth'
 import Navbar from '../components/Navbar'
 
 type TotpStep = 'idle' | 'setup' | 'disable'
+
+interface ApiToken {
+  id: string
+  name: string
+  is_active: boolean
+  last_used_at: string | null
+  created_at: string
+}
 
 export default function ProfilePage() {
   const { user, setUser } = useAuthStore()
@@ -36,6 +44,17 @@ export default function ProfilePage() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [avatarLoading, setAvatarLoading] = useState(false)
   const [avatarErr, setAvatarErr] = useState('')
+
+  // ── API tokens ────────────────────────────────────────────────────────────
+  const [tokens, setTokens] = useState<ApiToken[]>([])
+  const [newTokenName, setNewTokenName] = useState('')
+  const [createdToken, setCreatedToken] = useState('')
+  const [tokenErr, setTokenErr] = useState('')
+  const [tokenLoading, setTokenLoading] = useState(false)
+
+  useEffect(() => {
+    api.get('/users/me/tokens').then(r => setTokens(r.data)).catch(() => {})
+  }, [])
 
   async function handleProfileSave(e: React.FormEvent) {
     e.preventDefault()
@@ -122,15 +141,41 @@ export default function ProfilePage() {
     try {
       const form = new FormData()
       form.append('file', file)
-      const { data } = await api.post('/users/me/avatar', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
+      // не задаём Content-Type вручную — axios сам поставит multipart/form-data с boundary
+      const { data } = await api.post('/users/me/avatar', form)
       setUser({ ...user!, avatar_url: data.avatar_url })
     } catch (err: any) {
       setAvatarErr(err.response?.data?.detail ?? 'Ошибка загрузки аватара')
     } finally {
       setAvatarLoading(false)
       if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  async function handleCreateToken(e: React.FormEvent) {
+    e.preventDefault()
+    setTokenErr(''); setCreatedToken('')
+    setTokenLoading(true)
+    try {
+      const { data } = await api.post('/users/me/tokens', { name: newTokenName })
+      setCreatedToken(data.token)
+      setNewTokenName('')
+      const r = await api.get('/users/me/tokens')
+      setTokens(r.data)
+    } catch (err: any) {
+      setTokenErr(err.response?.data?.detail ?? 'Ошибка создания токена')
+    } finally {
+      setTokenLoading(false)
+    }
+  }
+
+  async function handleRevokeToken(id: string) {
+    try {
+      await api.delete(`/users/me/tokens/${id}`)
+      setTokens(t => t.filter(x => x.id !== id))
+      if (createdToken) setCreatedToken('')
+    } catch {
+      setTokenErr('Ошибка отзыва токена')
     }
   }
 
@@ -310,6 +355,67 @@ export default function ProfilePage() {
                 </button>
               </form>
               {totpErr && <p style={{ color: '#f87171', fontSize: 13, marginTop: 10 }}>{totpErr}</p>}
+            </div>
+          )}
+        </div>
+
+        {/* API Tokens */}
+        <div style={card}>
+          <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>Токены доступа (API)</h3>
+          <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
+            Используются для доступа к API без логина (например, из CI/CD или внешних скриптов).
+          </p>
+
+          <form onSubmit={handleCreateToken} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <input
+              style={{ ...inputStyle, flex: 1, marginBottom: 0 }}
+              placeholder="Название токена"
+              value={newTokenName}
+              onChange={e => setNewTokenName(e.target.value)}
+              required
+            />
+            <button style={btn} type="submit" disabled={tokenLoading}>
+              {tokenLoading ? '…' : 'Создать'}
+            </button>
+          </form>
+
+          {createdToken && (
+            <div style={{ background: '#0f172a', border: '1px solid #16a34a', borderRadius: 6, padding: 12, marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: '#4ade80', marginBottom: 6 }}>
+                Токен создан. Сохраните его — он показывается один раз:
+              </div>
+              <code style={{ fontSize: 12, color: '#e2e8f0', wordBreak: 'break-all' }}>{createdToken}</code>
+            </div>
+          )}
+
+          {tokenErr && <p style={{ color: '#f87171', fontSize: 12, marginBottom: 10 }}>{tokenErr}</p>}
+
+          {tokens.length === 0 ? (
+            <p style={{ fontSize: 13, color: '#475569' }}>Нет активных токенов</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {tokens.map(t => (
+                <div key={t.id} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  background: '#0f172a', borderRadius: 6, padding: '10px 14px',
+                }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: t.is_active ? '#f1f5f9' : '#475569' }}>
+                      {t.name}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>
+                      Создан: {new Date(t.created_at).toLocaleDateString()}
+                      {t.last_used_at && ` · Использован: ${new Date(t.last_used_at).toLocaleDateString()}`}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleRevokeToken(t.id)}
+                    style={{ ...btn, background: '#7f1d1d', fontSize: 12, padding: '5px 12px' }}
+                  >
+                    Отозвать
+                  </button>
+                </div>
+              ))}
             </div>
           )}
         </div>

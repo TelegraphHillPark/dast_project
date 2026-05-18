@@ -29,10 +29,9 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
 
     # OAuth
+    FRONTEND_URL: str = "http://localhost"
     GITHUB_CLIENT_ID: str = ""
     GITHUB_CLIENT_SECRET: str = ""
-    GOOGLE_CLIENT_ID: str = ""
-    GOOGLE_CLIENT_SECRET: str = ""
 
     # File uploads
     MAX_UPLOAD_SIZE_BYTES: int = 1 * 1024 * 1024 * 1024  # 1 GB

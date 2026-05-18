@@ -87,9 +87,7 @@ export default function LoginPage() {
             {loading ? 'Вход…' : 'Войти'}
           </button>
           <div style={{ marginTop: 16, textAlign: 'center', fontSize: 13, color: '#94a3b8' }}>
-            <span>Войти через: </span>
-            <a href="/api/auth/oauth/github" style={{ marginRight: 12, color: '#94a3b8' }}>GitHub</a>
-            <a href="/api/auth/oauth/google" style={{ color: '#94a3b8' }}>Google</a>
+            <a href="/api/auth/oauth/github" style={{ color: '#94a3b8' }}>Войти через GitHub</a>
           </div>
           <div style={{ marginTop: 16, textAlign: 'center', fontSize: 13, color: '#64748b' }}>
             Нет аккаунта?{' '}
