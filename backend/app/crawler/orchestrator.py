@@ -143,12 +143,12 @@ class ScanOrchestrator:
         heur = HeuristicAnalyzer()
 
         # Exclude login URL from attack targets to avoid flooding auth endpoints
-        login_url = (scan.config or {}).get("login_url", "").rstrip("/")
+        login_url = ((scan.config or {}).get("login_url") or "").rstrip("/")
 
         get_targets = engine.generate_get_targets(result.visited_urls)[:_MAX_GET_ATTACK]
         post_targets = [
             t for t in engine.generate_post_targets(result.forms)
-            if not (login_url and t.action.rstrip("/") == login_url)
+            if t.action and not (login_url and t.action.rstrip("/") == login_url)
         ][:_MAX_POST_ATTACK]
 
         total = len(get_targets) + len(post_targets)
@@ -211,16 +211,16 @@ class ScanOrchestrator:
             for target in get_targets:
                 if self._stop_event.is_set():
                     break
-
-                baseline = await self._baseline_get(client, target.url)
-                if baseline is None:
-                    continue
-
                 try:
+                    baseline = await self._baseline_get(client, target.url)
+                    if baseline is None:
+                        continue
+
                     t0 = time.monotonic()
                     resp = await client.get(target.test_url)
                     elapsed = time.monotonic() - t0
-                except Exception:
+                except Exception as e:
+                    logger.debug("GET target error %s: %s", target.url, e)
                     continue
 
                 tested += 1
@@ -264,16 +264,16 @@ class ScanOrchestrator:
             for target in post_targets:
                 if self._stop_event.is_set():
                     break
-
-                baseline = await self._baseline_post(client, target.action, target.field, target.data)
-                if baseline is None:
-                    continue
-
                 try:
+                    baseline = await self._baseline_post(client, target.action, target.field, target.data)
+                    if baseline is None:
+                        continue
+
                     t0 = time.monotonic()
                     resp = await client.post(target.action, data=target.data)
                     elapsed = time.monotonic() - t0
-                except Exception:
+                except Exception as e:
+                    logger.debug("POST target error %s: %s", target.action, e)
                     continue
 
                 tested += 1

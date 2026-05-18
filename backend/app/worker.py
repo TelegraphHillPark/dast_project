@@ -71,7 +71,7 @@ async def main() -> None:
     try:
         while True:
             try:
-                item = await r.blpop("scan_queue", timeout=2)
+                item = await r.blpop("scan_queue", timeout=1)
                 if item:
                     _, scan_id_bytes = item
                     scan_id = scan_id_bytes.decode()

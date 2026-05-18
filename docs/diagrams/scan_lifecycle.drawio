@@ -1,0 +1,96 @@
+<mxfile host="app.diagrams.net" version="21.0.0" type="device">
+  <diagram id="scan-lifecycle" name="Жизненный цикл скана">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- States -->
+        <mxCell id="pending" value="pending" style="ellipse;whiteSpace=wrap;html=1;fillColor=#64748b;fontColor=#ffffff;strokeColor=#334155;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="420" y="80" width="130" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="running" value="running" style="ellipse;whiteSpace=wrap;html=1;fillColor=#1d4ed8;fontColor=#ffffff;strokeColor=#1e40af;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="420" y="230" width="130" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="paused" value="paused" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d97706;fontColor=#ffffff;strokeColor=#92400e;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="160" y="230" width="130" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="finished" value="finished" style="ellipse;whiteSpace=wrap;html=1;fillColor=#16a34a;fontColor=#ffffff;strokeColor=#166534;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="420" y="420" width="130" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="failed" value="failed" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dc2626;fontColor=#ffffff;strokeColor=#991b1b;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="680" y="420" width="130" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cancelled" value="cancelled" style="ellipse;whiteSpace=wrap;html=1;fillColor=#7c3aed;fontColor=#ffffff;strokeColor=#5b21b6;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="160" y="420" width="130" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Start marker -->
+        <mxCell id="start" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="468" y="20" width="30" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Transitions -->
+        <!-- start → pending -->
+        <mxCell id="t_start" value="POST /scans" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;" edge="1" source="start" target="pending" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- pending → running -->
+        <mxCell id="t_pr" value="воркер забирает из очереди" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;" edge="1" source="pending" target="running" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- running → finished -->
+        <mxCell id="t_rf" value="всё проверено" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;" edge="1" source="running" target="finished" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- running → paused -->
+        <mxCell id="t_rp" value="POST /pause" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;" edge="1" source="running" target="paused" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- paused → pending (resume) -->
+        <mxCell id="t_pp" value="POST /resume (→ очередь)" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;" edge="1" source="paused" target="pending" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="225" y="140" />
+              <mxPoint x="485" y="140" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- running → failed -->
+        <mxCell id="t_rfail" value="исключение / timeout" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;" edge="1" source="running" target="failed" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- running → cancelled -->
+        <mxCell id="t_rc" value="POST /cancel" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;" edge="1" source="running" target="cancelled" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- pending → cancelled -->
+        <mxCell id="t_pc" value="POST /cancel" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;dashed=1;" edge="1" source="pending" target="cancelled" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- paused → cancelled -->
+        <mxCell id="t_pausec" value="POST /cancel" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;dashed=1;" edge="1" source="paused" target="cancelled" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Terminal state legend -->
+        <mxCell id="legend" value="Терминальные состояния: finished, failed, cancelled&#xa;(отчёт доступен после finished / cancelled)" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="140" y="560" width="450" height="50" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

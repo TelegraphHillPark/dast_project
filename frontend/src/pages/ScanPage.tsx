@@ -321,8 +321,8 @@ function ScanDetail({ scanId }: { scanId: string }) {
   // Poll scan status while active
   useEffect(() => {
     if (!scan) return
-    if (scan.status !== 'pending' && scan.status !== 'running') return
-    const id = setInterval(load, 3000)
+    if (!['pending', 'running', 'paused'].includes(scan.status)) return
+    const id = setInterval(load, 2000)
     return () => clearInterval(id)
   }, [scan?.status])
 
@@ -340,19 +340,34 @@ function ScanDetail({ scanId }: { scanId: string }) {
   }, [logs, logsExpanded])
 
   async function handlePause() {
-    await api.post(`/scans/${scanId}/pause`)
-    load()
+    try {
+      await api.post(`/scans/${scanId}/pause`)
+      await load()
+    } catch (e: any) {
+      const msg = e.response?.data?.detail ?? e.response?.data?.error ?? `Ошибка паузы (${e.response?.status ?? 'нет ответа'})`
+      alert(msg)
+    }
   }
 
   async function handleResume() {
-    await api.post(`/scans/${scanId}/resume`)
-    load()
+    try {
+      await api.post(`/scans/${scanId}/resume`)
+      await load()
+    } catch (e: any) {
+      const msg = e.response?.data?.detail ?? e.response?.data?.error ?? `Ошибка возобновления (${e.response?.status ?? 'нет ответа'})`
+      alert(msg)
+    }
   }
 
   async function handleCancel() {
     if (!window.confirm('Остановить сканирование окончательно? Это действие нельзя отменить.')) return
-    await api.post(`/scans/${scanId}/cancel`)
-    load()
+    try {
+      await api.post(`/scans/${scanId}/cancel`)
+      await load()
+    } catch (e: any) {
+      const msg = e.response?.data?.detail ?? e.response?.data?.error ?? `Ошибка остановки (${e.response?.status ?? 'нет ответа'})`
+      alert(msg)
+    }
   }
 
   if (error) return (

@@ -1,0 +1,88 @@
+<mxfile host="app.diagrams.net" version="21.0.0" type="device">
+  <diagram id="arch-diagram" name="Архитектура системы">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Docker Compose boundary -->
+        <mxCell id="docker" value="Docker Compose" style="text;html=1;align=left;verticalAlign=top;spacingLeft=8;overflow=hidden;whiteSpace=wrap;strokeColor=#007FFF;strokeWidth=2;fillColor=#EBF5FF;dashed=1;dashPattern=8 4;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="210" y="80" width="730" height="510" as="geometry" />
+        </mxCell>
+
+        <!-- Browser -->
+        <mxCell id="browser" value="Браузер" style="shape=mxgraph.network.clients.computer;html=1;labelPosition=bottom;align=center;verticalLabelPosition=top;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="55" y="260" width="90" height="75" as="geometry" />
+        </mxCell>
+
+        <!-- Nginx -->
+        <mxCell id="nginx" value="&lt;b&gt;Nginx 1.27&lt;/b&gt;&#xa;:80 → :443 (TLS)&#xa;статика + прокси /api" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="240" y="250" width="170" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- React SPA -->
+        <mxCell id="spa" value="&lt;b&gt;React 18 SPA&lt;/b&gt;&#xa;TypeScript + Vite&#xa;frontend/dist" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="470" y="120" width="170" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- FastAPI Backend -->
+        <mxCell id="backend" value="&lt;b&gt;FastAPI Backend&lt;/b&gt;&#xa;Python 3.11 + SQLAlchemy 2.0&#xa;порт 8000" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="470" y="250" width="170" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- PostgreSQL -->
+        <mxCell id="postgres" value="&lt;b&gt;PostgreSQL 16&lt;/b&gt;&#xa;users, scans,&#xa;vulnerabilities, sessions" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="720" y="150" width="170" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Redis -->
+        <mxCell id="redis" value="&lt;b&gt;Redis 7&lt;/b&gt;&#xa;scan_queue (list)&#xa;scan logs" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="720" y="300" width="170" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Worker -->
+        <mxCell id="worker" value="&lt;b&gt;Worker&lt;/b&gt;&#xa;Оркестратор → Краулер&#xa;Движок нагрузок + Анализаторы" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="470" y="430" width="170" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Uploads volume -->
+        <mxCell id="uploads" value="uploads_data&#xa;(аватары)" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="310" y="430" width="110" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- EDGES -->
+        <mxCell id="e1" value="HTTPS" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;" edge="1" source="browser" target="nginx" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e2" value="статика" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;" edge="1" source="nginx" target="spa" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e3" value="/api/*" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;" edge="1" source="nginx" target="backend" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e4" value="asyncpg" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;" edge="1" source="backend" target="postgres" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e5" value="RPUSH" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;" edge="1" source="backend" target="redis" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e6" value="BLPOP / RPUSH logs" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;dashed=1;" edge="1" source="worker" target="redis" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e7" value="результаты" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;" edge="1" source="worker" target="postgres" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e8" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;" edge="1" source="backend" target="uploads" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

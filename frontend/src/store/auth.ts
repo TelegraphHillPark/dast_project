@@ -29,6 +29,6 @@ export const useAuthStore = create<AuthState>()(
       setUser: (user) => set({ user }),
       logout: () => set({ accessToken: null, refreshToken: null, user: null }),
     }),
-    { name: 'dast-auth', partialize: (s) => ({ refreshToken: s.refreshToken, user: s.user }) },
+    { name: 'dast-auth', partialize: (s) => ({ accessToken: s.accessToken, refreshToken: s.refreshToken, user: s.user }) },
   ),
 )

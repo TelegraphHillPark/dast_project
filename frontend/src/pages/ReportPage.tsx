@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, Fragment } from 'react'
 import { useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import Navbar from '../components/Navbar'
@@ -62,10 +62,43 @@ const SEV_LABEL: Record<string, string> = {
   info: 'Информационная',
 }
 
+function EvidenceDetails({ vuln }: { vuln: ReportVuln }) {
+  const rows: [string, string][] = []
+  if (vuln.payload) rows.push(['Payload', vuln.payload])
+  if (vuln.evidence) {
+    const { confidence, ...rest } = vuln.evidence
+    for (const [k, v] of Object.entries(rest)) {
+      if (v !== null && v !== undefined) rows.push([k, String(v)])
+    }
+  }
+  if (rows.length === 0) return <span style={{ color: '#475569' }}>нет данных</span>
+  return (
+    <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%' }}>
+      <tbody>
+        {rows.map(([k, v]) => (
+          <tr key={k}>
+            <td style={{ color: '#64748b', paddingRight: 12, whiteSpace: 'nowrap', verticalAlign: 'top', paddingBottom: 4 }}>{k}</td>
+            <td style={{ fontFamily: 'monospace', color: '#e2e8f0', wordBreak: 'break-all' }}>{v}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
 export default function ReportPage() {
   const { id } = useParams<{ id: string }>()
   const [report, setReport] = useState<Report | null>(null)
   const [error, setError] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const toggleRow = useCallback((vid: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      next.has(vid) ? next.delete(vid) : next.add(vid)
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     if (!id) return
@@ -139,13 +172,6 @@ export default function ReportPage() {
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button style={btn} onClick={downloadJson}>⬇ JSON</button>
-            <a
-              href={`/api/scans/${id}/report.pdf`}
-              download={`scan_${id}_report.pdf`}
-              style={{ ...btn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-            >
-              ⬇ PDF
-            </a>
           </div>
         </div>
 
@@ -219,43 +245,58 @@ export default function ReportPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 800 }}>
                 <thead>
                   <tr>
-                    {['Тип', 'Критичность', 'Уверенность', 'URL', 'Параметр', 'Метод', 'Рекомендация'].map(h => (
-                      <th key={h} style={th}>{h}</th>
+                    {['Тип', 'Критичность', 'Уверенность', 'URL', 'Параметр', 'Метод', 'Рекомендация', ''].map((h, i) => (
+                      <th key={i} style={th}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {report.vulnerabilities.map(v => (
-                    <tr key={v.id}>
-                      <td style={td}>{VULN_LABEL[v.vuln_type] ?? v.vuln_type}</td>
-                      <td style={td}>
-                        <span style={{
-                          padding: '1px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
-                          background: (SEV_COLOR[v.severity] ?? '#64748b') + '22',
-                          color: SEV_COLOR[v.severity] ?? '#64748b',
-                        }}>
-                          {v.severity.toUpperCase()}
-                        </span>
-                      </td>
-                      <td style={td}>
-                        <span style={{
-                          padding: '1px 8px', borderRadius: 10, fontSize: 11,
-                          background: v.confidence === 'high' ? '#16a34a22' : '#d9770622',
-                          color: v.confidence === 'high' ? '#4ade80' : '#fbbf24',
-                        }}>
-                          {v.confidence === 'high' ? 'высокая' : 'низкая'}
-                        </span>
-                      </td>
-                      <td style={{ ...td, fontFamily: 'monospace', fontSize: 11, color: '#94a3b8', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {v.url}
-                      </td>
-                      <td style={{ ...td, color: '#94a3b8' }}>{v.parameter ?? '—'}</td>
-                      <td style={{ ...td, color: '#94a3b8' }}>{v.method}</td>
-                      <td style={{ ...td, fontSize: 12, color: '#64748b', maxWidth: 250 }}>
-                        {v.recommendation ?? '—'}
-                      </td>
-                    </tr>
-                  ))}
+                  {report.vulnerabilities.map(v => {
+                    const isOpen = expanded.has(v.id)
+                    return (
+                      <Fragment key={v.id}>
+                        <tr style={{ cursor: 'pointer' }} onClick={() => toggleRow(v.id)}>
+                          <td style={td}>{VULN_LABEL[v.vuln_type] ?? v.vuln_type}</td>
+                          <td style={td}>
+                            <span style={{
+                              padding: '1px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                              background: (SEV_COLOR[v.severity] ?? '#64748b') + '22',
+                              color: SEV_COLOR[v.severity] ?? '#64748b',
+                            }}>
+                              {v.severity.toUpperCase()}
+                            </span>
+                          </td>
+                          <td style={td}>
+                            <span style={{
+                              padding: '1px 8px', borderRadius: 10, fontSize: 11,
+                              background: v.confidence === 'high' ? '#16a34a22' : '#d9770622',
+                              color: v.confidence === 'high' ? '#4ade80' : '#fbbf24',
+                            }}>
+                              {v.confidence === 'high' ? 'высокая' : 'низкая'}
+                            </span>
+                          </td>
+                          <td style={{ ...td, fontFamily: 'monospace', fontSize: 11, color: '#94a3b8', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {v.url}
+                          </td>
+                          <td style={{ ...td, color: '#94a3b8' }}>{v.parameter ?? '—'}</td>
+                          <td style={{ ...td, color: '#94a3b8' }}>{v.method}</td>
+                          <td style={{ ...td, fontSize: 12, color: '#64748b', maxWidth: 250 }}>
+                            {v.recommendation ?? '—'}
+                          </td>
+                          <td style={{ ...td, textAlign: 'center', color: '#64748b', fontSize: 14, width: 30 }}>
+                            {isOpen ? '▲' : '▼'}
+                          </td>
+                        </tr>
+                        {isOpen && (
+                          <tr style={{ background: '#0f172a' }}>
+                            <td colSpan={8} style={{ padding: '10px 16px', borderBottom: '1px solid #1e293b' }}>
+                              <EvidenceDetails vuln={v} />
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
