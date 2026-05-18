@@ -5,10 +5,22 @@ Strategies: none | cookie | basic | bearer | form
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlparse
 
 import httpx
 
 logger = logging.getLogger("dast.auth_manager")
+
+
+def _canonical_url(url: str) -> str:
+    """Normalize URL for comparison: strip default port and trailing slash."""
+    p = urlparse(url.rstrip("/"))
+    netloc = p.netloc
+    if p.scheme == "http" and netloc.endswith(":80"):
+        netloc = netloc[:-3]
+    elif p.scheme == "https" and netloc.endswith(":443"):
+        netloc = netloc[:-4]
+    return f"{p.scheme}://{netloc}{p.path}"
 
 
 class AuthManager:
@@ -49,17 +61,62 @@ class AuthManager:
 
         return httpx.AsyncClient(**kwargs)
 
-    async def perform_form_login(self, client: httpx.AsyncClient) -> None:
+    async def perform_form_login(self, client: httpx.AsyncClient) -> bool:
         if self.auth_type != "form" or not self.login_url or not self.username:
-            return
+            return False
         try:
-            await client.post(
-                self.login_url,
-                data={
-                    self.username_field: self.username,
-                    self.password_field: self.password or "",
-                },
+            from bs4 import BeautifulSoup
+
+            # Step 1: GET the login page to collect hidden CSRF fields
+            resp = await client.get(self.login_url)
+            hidden: dict[str, str] = {}
+            submit_fields: dict[str, str] = {}
+            if "text/html" in resp.headers.get("content-type", ""):
+                soup = BeautifulSoup(resp.text, "lxml")
+                # Find the login form (pick the one most likely to be the auth form)
+                form = None
+                for f in soup.find_all("form"):
+                    inputs = {i.get("name", "") for i in f.find_all("input")}
+                    if self.username_field in inputs and self.password_field in inputs:
+                        form = f
+                        break
+                if form is None:
+                    form = soup.find("form")
+
+                if form:
+                    for inp in form.find_all("input"):
+                        name = inp.get("name")
+                        if not name:
+                            continue
+                        t = inp.get("type", "text").lower()
+                        if t == "hidden":
+                            hidden[name] = inp.get("value", "")
+                        elif t == "submit":
+                            submit_fields[name] = inp.get("value", "")
+
+            post_data = {
+                **hidden,
+                **submit_fields,
+                self.username_field: self.username,
+                self.password_field: self.password or "",
+            }
+
+            # Step 2: POST credentials
+            login_resp = await client.post(self.login_url, data=post_data)
+
+            # Step 3: Detect failure — if we're back on the login page, login failed.
+            # Compare canonical URLs so http://host:80/login == http://host/login.
+            final_url = str(login_resp.url)
+            if _canonical_url(final_url) == _canonical_url(self.login_url):
+                logger.warning("Form login appears to have failed (redirected back to login page): %s", final_url)
+                return False
+
+            logger.info(
+                "Form login succeeded for %s → landed on %s (hidden=%s)",
+                self.login_url, final_url, list(hidden.keys()),
             )
-            logger.info("Form login completed for %s", self.login_url)
+            return True
+
         except Exception as exc:
-            logger.warning("Form login failed: %s", exc)
+            logger.warning("Form login exception: %s", exc)
+            return False

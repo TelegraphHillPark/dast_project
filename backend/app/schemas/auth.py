@@ -53,6 +53,7 @@ class TOTPSetupResponse(BaseModel):
 
 
 class TOTPEnableRequest(BaseModel):
+    secret: str
     code: str
 
 

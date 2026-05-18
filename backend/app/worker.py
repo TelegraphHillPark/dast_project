@@ -49,7 +49,7 @@ async def process_scan(scan_id: str) -> None:
 
 
 async def check_pause_signals() -> None:
-    """Detect scans paused via API and stop their running orchestrators."""
+    """Detect scans paused or cancelled via API and stop their running orchestrators."""
     if not _running:
         return
     async with AsyncSessionLocal() as db:
@@ -58,7 +58,10 @@ async def check_pause_signals() -> None:
             scan = result.scalar_one_or_none()
             if scan and scan.status == ScanStatus.paused:
                 logger.info("Pause signal detected for scan %s", scan_id)
-                orch.stop()
+                orch.stop(cancelled=False)
+            elif scan and scan.status == ScanStatus.cancelled:
+                logger.info("Cancel signal detected for scan %s", scan_id)
+                orch.stop(cancelled=True)
 
 
 async def main() -> None:

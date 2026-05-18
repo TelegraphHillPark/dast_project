@@ -40,6 +40,7 @@ class AsyncCrawler:
         excluded_paths: list[str],
         auth_config: dict,
         stop_event: asyncio.Event | None = None,
+        on_visit=None,
     ):
         self.target_url = target_url.rstrip("/")
         self.max_depth = max_depth
@@ -48,6 +49,7 @@ class AsyncCrawler:
         self.stop_event = stop_event or asyncio.Event()
         self.result = CrawlResult()
         self._base = urlparse(self.target_url)
+        self._on_visit = on_visit
 
     # ── scope helpers ──────────────────────────────────────────────────────────
 
@@ -72,7 +74,10 @@ class AsyncCrawler:
 
         async with client:
             if self.auth_manager.auth_type == "form":
-                await self.auth_manager.perform_form_login(client)
+                ok = await self.auth_manager.perform_form_login(client)
+                if self._on_visit:
+                    msg = "Вход выполнен успешно" if ok else "⚠ Вход не удался — проверь логин/пароль и URL страницы входа"
+                    await self._on_visit(f"[auth] {msg}", -1)
 
             queue: deque[tuple[str, int]] = deque([(self.target_url, 0)])
 
@@ -89,6 +94,8 @@ class AsyncCrawler:
 
                 self.result.visited_urls.add(url)
                 logger.debug("[depth=%d] crawling %s", depth, url)
+                if self._on_visit:
+                    await self._on_visit(url, depth)
 
                 html = await self._fetch(client, url)
                 if html is None:
@@ -96,7 +103,17 @@ class AsyncCrawler:
 
                 links = self._extract_links(url, html)
                 self.result.graph[url] = links
-                self.result.forms.extend(self._extract_forms(url, html))
+                forms = self._extract_forms(url, html)
+                self.result.forms.extend(forms)
+                await self._fetch_js_files(client, url, html)
+
+                # For GET forms: probe with a neutral value to discover param URLs
+                for form in forms:
+                    if form.get("method", "GET") == "GET":
+                        probe_url = self._build_get_probe(form, url)
+                        if probe_url and probe_url not in self.result.visited_urls:
+                            if depth + 1 <= self.max_depth:
+                                queue.append((probe_url, depth + 1))
 
                 for route in self._extract_js_routes(html):
                     full = urljoin(self.target_url, route)
@@ -121,6 +138,31 @@ class AsyncCrawler:
         except Exception as exc:
             logger.debug("fetch failed %s: %s", url, exc)
             return None
+
+    async def _fetch_js_files(self, client: httpx.AsyncClient, base_url: str, html: str) -> None:
+        """Fetch inline <script src> files and harvest API routes from their content."""
+        soup = BeautifulSoup(html, "lxml")
+        script_srcs = [
+            tag["src"] for tag in soup.find_all("script", src=True)
+        ]
+        for src in script_srcs[:20]:
+            full_src = urljoin(base_url, src)
+            if not self._in_scope(full_src):
+                continue
+            try:
+                resp = await client.get(full_src)
+                ct = resp.headers.get("content-type", "")
+                if "javascript" not in ct and "text/plain" not in ct:
+                    continue
+                for route in self._extract_js_routes(resp.text):
+                    full_route = urljoin(self.target_url, route)
+                    if full_route not in self.result.js_routes:
+                        self.result.js_routes.append(full_route)
+                    # Add as a visitable URL so param-bearing paths get attacked
+                    if "?" in full_route and full_route not in self.result.visited_urls:
+                        self.result.visited_urls.add(full_route)
+            except Exception:
+                continue
 
     # ── extractors ────────────────────────────────────────────────────────────
 
@@ -165,3 +207,30 @@ class AsyncCrawler:
 
     def _extract_js_routes(self, html: str) -> list[str]:
         return list({m.group(1) for m in _JS_PATH_RE.finditer(html)})
+
+    def _build_get_probe(self, form: dict, base_url: str) -> str | None:
+        """Submit a GET form with neutral probe values to discover ?param=value URLs.
+
+        Submit-type inputs are included with their declared value so that apps
+        that gate SQL execution on isset($_REQUEST['Submit']) are exercised correctly.
+        """
+        from urllib.parse import urlencode, urlparse, parse_qs
+        fields = [
+            f for f in form.get("inputs", [])
+            if f.get("name") and f.get("type") not in ("hidden", "file")
+        ]
+        if not fields:
+            return None
+        action = form.get("action", base_url)
+        parsed = urlparse(action)
+        existing = parse_qs(parsed.query, keep_blank_values=True)
+        params = {}
+        for f in fields:
+            if f.get("type") == "submit":
+                params[f["name"]] = f.get("value") or "Submit"
+            else:
+                params[f["name"]] = f.get("value") or "1"
+        merged = {**existing, **{k: [v] for k, v in params.items()}}
+        from urllib.parse import urlencode as _enc
+        qs = _enc({k: v[0] for k, v in merged.items()})
+        return parsed._replace(query=qs).geturl()

@@ -66,6 +66,12 @@ async def upload_avatar(user: User, file: UploadFile, db: AsyncSession) -> str:
     if file.content_type not in allowed:
         raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Only JPEG/PNG/WebP/GIF allowed")
 
+    MAX_AVATAR_SIZE = 5 * 1024 * 1024  # 5 MB
+    data = await file.read()
+    if len(data) > MAX_AVATAR_SIZE:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File exceeds 5 MB limit")
+    await file.seek(0)
+
     avatars_dir = "/app/uploads/avatars"
     os.makedirs(avatars_dir, exist_ok=True)
 

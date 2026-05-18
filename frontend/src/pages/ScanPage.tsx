@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import Navbar from '../components/Navbar'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type ScanStatus = 'pending' | 'running' | 'paused' | 'finished' | 'failed'
+type ScanStatus = 'pending' | 'running' | 'paused' | 'finished' | 'failed' | 'cancelled'
 
 interface Vulnerability {
   id: string
@@ -17,6 +17,7 @@ interface Vulnerability {
   payload: string | null
   recommendation: string | null
   created_at: string
+  evidence?: { confidence?: string } | null
 }
 
 interface ScanDetail {
@@ -47,6 +48,7 @@ const STATUS_LABEL: Record<ScanStatus, string> = {
   paused: 'Приостановлен',
   finished: 'Завершён',
   failed: 'Ошибка',
+  cancelled: 'Остановлен',
 }
 
 const STATUS_COLOR: Record<ScanStatus, string> = {
@@ -55,6 +57,7 @@ const STATUS_COLOR: Record<ScanStatus, string> = {
   paused: '#d97706',
   finished: '#16a34a',
   failed: '#dc2626',
+  cancelled: '#7c3aed',
 }
 
 const SEV_COLOR: Record<string, string> = {
@@ -289,6 +292,10 @@ function ScanDetail({ scanId }: { scanId: string }) {
   const navigate = useNavigate()
   const [scan, setScan] = useState<ScanDetail | null>(null)
   const [error, setError] = useState('')
+  const [logs, setLogs] = useState<string[]>([])
+  const [logOffset, setLogOffset] = useState(0)
+  const [logsExpanded, setLogsExpanded] = useState(true)
+  const logEndRef = useRef<HTMLDivElement>(null)
 
   async function load() {
     try {
@@ -299,15 +306,38 @@ function ScanDetail({ scanId }: { scanId: string }) {
     }
   }
 
-  useEffect(() => { load() }, [scanId])
+  async function loadLogs(offset: number) {
+    try {
+      const { data } = await api.get(`/scans/${scanId}/logs?offset=${offset}`)
+      if (data.lines.length > 0) {
+        setLogs(prev => [...prev, ...data.lines])
+        setLogOffset(data.total)
+      }
+    } catch { /* ignore */ }
+  }
 
-  // Poll while active
+  useEffect(() => { load(); loadLogs(0) }, [scanId])
+
+  // Poll scan status while active
   useEffect(() => {
     if (!scan) return
     if (scan.status !== 'pending' && scan.status !== 'running') return
-    const id = setInterval(load, 4000)
+    const id = setInterval(load, 3000)
     return () => clearInterval(id)
   }, [scan?.status])
+
+  // Poll logs while active
+  useEffect(() => {
+    if (!scan) return
+    if (scan.status !== 'pending' && scan.status !== 'running') return
+    const id = setInterval(() => loadLogs(logOffset), 2000)
+    return () => clearInterval(id)
+  }, [scan?.status, logOffset])
+
+  // Auto-scroll log panel
+  useEffect(() => {
+    if (logsExpanded) logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [logs, logsExpanded])
 
   async function handlePause() {
     await api.post(`/scans/${scanId}/pause`)
@@ -316,6 +346,12 @@ function ScanDetail({ scanId }: { scanId: string }) {
 
   async function handleResume() {
     await api.post(`/scans/${scanId}/resume`)
+    load()
+  }
+
+  async function handleCancel() {
+    if (!window.confirm('Остановить сканирование окончательно? Это действие нельзя отменить.')) return
+    await api.post(`/scans/${scanId}/cancel`)
     load()
   }
 
@@ -354,12 +390,20 @@ function ScanDetail({ scanId }: { scanId: string }) {
             }}>
               {STATUS_LABEL[scan.status]}
             </span>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               {scan.status === 'running' && (
                 <button style={{ ...btn, background: '#92400e' }} onClick={handlePause}>⏸ Пауза</button>
               )}
               {scan.status === 'paused' && (
                 <button style={{ ...btn, background: '#166534' }} onClick={handleResume}>▶ Продолжить</button>
+              )}
+              {(scan.status === 'running' || scan.status === 'paused' || scan.status === 'pending') && (
+                <button style={{ ...btn, background: '#7f1d1d' }} onClick={handleCancel}>⏹ Остановить</button>
+              )}
+              {(scan.status === 'finished' || scan.status === 'cancelled') && (
+                <button style={{ ...btn, background: '#1e3a5f' }} onClick={() => navigate(`/scans/${scanId}/report`)}>
+                  📄 Отчёт
+                </button>
               )}
             </div>
           </div>
@@ -394,7 +438,7 @@ function ScanDetail({ scanId }: { scanId: string }) {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  {['Тип', 'Критичность', 'URL', 'Параметр', 'Метод'].map(h => (
+                  {['Тип', 'Критичность', 'Уверенность', 'URL', 'Параметр', 'Метод'].map(h => (
                     <th key={h} style={{
                       padding: '8px 12px', background: '#0f172a', fontSize: 12,
                       color: '#94a3b8', textAlign: 'left', borderBottom: '1px solid #1e293b',
@@ -416,6 +460,17 @@ function ScanDetail({ scanId }: { scanId: string }) {
                       }}>
                         {v.severity.toUpperCase()}
                       </span>
+                    </td>
+                    <td style={{ padding: '8px 12px', borderBottom: '1px solid #0f172a' }}>
+                      {v.evidence?.confidence ? (
+                        <span style={{
+                          padding: '1px 8px', borderRadius: 10, fontSize: 11,
+                          background: v.evidence.confidence === 'high' ? '#16a34a22' : '#d9770622',
+                          color: v.evidence.confidence === 'high' ? '#4ade80' : '#fbbf24',
+                        }}>
+                          {v.evidence.confidence === 'high' ? 'высокая' : 'низкая'}
+                        </span>
+                      ) : '—'}
                     </td>
                     <td style={{ padding: '8px 12px', borderBottom: '1px solid #0f172a', fontSize: 11, fontFamily: 'monospace', maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#94a3b8' }}>
                       {v.url}
@@ -449,6 +504,57 @@ function ScanDetail({ scanId }: { scanId: string }) {
             </div>
           </div>
         )}
+
+        {/* Real-time log panel */}
+        {logs.length > 0 && (
+          <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 20px', cursor: 'pointer', userSelect: 'none',
+                borderBottom: logsExpanded ? '1px solid #0f172a' : 'none',
+              }}
+              onClick={() => setLogsExpanded(v => !v)}
+            >
+              <h3 style={{ margin: 0, fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
+                {(scan.status === 'running' || scan.status === 'pending') && (
+                  <span style={{
+                    display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+                    background: '#2563eb', animation: 'pulse 1.2s infinite',
+                  }} />
+                )}
+                Лог сканирования ({logs.length} записей)
+              </h3>
+              <span style={{ color: '#64748b', fontSize: 12 }}>{logsExpanded ? '▲ Свернуть' : '▼ Развернуть'}</span>
+            </div>
+            {logsExpanded && (
+              <div style={{
+                maxHeight: 400, overflowY: 'auto',
+                fontFamily: 'monospace', fontSize: 12, lineHeight: 1.7,
+                background: '#020817', padding: '12px 16px',
+              }}>
+                {logs.map((line, i) => {
+                  const isVuln = line.includes('[VULN]')
+                  const isError = line.includes('[ERROR]')
+                  const isCrawl = line.includes('[CRAWL]')
+                  const isAttack = line.includes('[ATTACK]')
+                  const color = isVuln ? '#f87171' : isError ? '#fb923c' : isCrawl ? '#60a5fa' : isAttack ? '#a78bfa' : '#94a3b8'
+                  return (
+                    <div key={i} style={{ color, marginBottom: 1 }}>{line}</div>
+                  )
+                })}
+                <div ref={logEndRef} />
+              </div>
+            )}
+          </div>
+        )}
+
+        <style>{`
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+          }
+        `}</style>
       </main>
     </div>
   )

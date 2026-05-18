@@ -24,7 +24,8 @@ async def create_scan(data: ScanCreate, owner_id: str, db: AsyncSession) -> Scan
         status=ScanStatus.pending,
     )
     db.add(scan)
-    await db.flush()
+    # Commit BEFORE pushing to Redis — worker must find the row in DB
+    await db.commit()
     await db.refresh(scan)
 
     r = aioredis.from_url(settings.REDIS_URL)
@@ -73,6 +74,16 @@ async def resume_scan(scan_id: str, owner_id: str, db: AsyncSession) -> Scan:
     finally:
         await r.aclose()
 
+    return scan
+
+
+async def cancel_scan(scan_id: str, owner_id: str, db: AsyncSession) -> Scan:
+    from datetime import datetime, timezone
+    scan = await get_scan(scan_id, owner_id, db)
+    if scan.status not in (ScanStatus.running, ScanStatus.pending, ScanStatus.paused):
+        raise HTTPException(status_code=400, detail="Scan cannot be cancelled in its current state")
+    scan.status = ScanStatus.cancelled
+    scan.finished_at = datetime.now(timezone.utc)
     return scan
 
 

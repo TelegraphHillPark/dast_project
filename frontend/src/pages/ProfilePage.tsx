@@ -1,7 +1,10 @@
 import { useRef, useState } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
 import { api } from '../api/client'
 import { useAuthStore } from '../store/auth'
 import Navbar from '../components/Navbar'
+
+type TotpStep = 'idle' | 'setup' | 'disable'
 
 export default function ProfilePage() {
   const { user, setUser } = useAuthStore()
@@ -19,6 +22,15 @@ export default function ProfilePage() {
   const [pwdMsg, setPwdMsg] = useState('')
   const [pwdErr, setPwdErr] = useState('')
   const [pwdLoading, setPwdLoading] = useState(false)
+
+  // ── 2FA ───────────────────────────────────────────────────────────────────
+  const [totpStep, setTotpStep] = useState<TotpStep>('idle')
+  const [totpSecret, setTotpSecret] = useState('')
+  const [totpUri, setTotpUri] = useState('')
+  const [totpCode, setTotpCode] = useState('')
+  const [totpMsg, setTotpMsg] = useState('')
+  const [totpErr, setTotpErr] = useState('')
+  const [totpLoading, setTotpLoading] = useState(false)
 
   // ── avatar upload ─────────────────────────────────────────────────────────
   const fileRef = useRef<HTMLInputElement>(null)
@@ -52,6 +64,53 @@ export default function ProfilePage() {
       setPwdErr(err.response?.data?.detail ?? 'Ошибка смены пароля')
     } finally {
       setPwdLoading(false)
+    }
+  }
+
+  async function startTotpSetup() {
+    setTotpErr(''); setTotpMsg('')
+    setTotpLoading(true)
+    try {
+      const { data } = await api.post('/auth/2fa/setup')
+      setTotpSecret(data.secret)
+      setTotpUri(data.qr_uri)
+      setTotpStep('setup')
+    } catch (err: any) {
+      setTotpErr(err.response?.data?.detail ?? 'Ошибка настройки 2FA')
+    } finally {
+      setTotpLoading(false)
+    }
+  }
+
+  async function confirmTotpEnable(e: React.FormEvent) {
+    e.preventDefault()
+    setTotpErr(''); setTotpMsg('')
+    setTotpLoading(true)
+    try {
+      await api.post('/auth/2fa/enable', { secret: totpSecret, code: totpCode })
+      setTotpMsg('Двухфакторная аутентификация включена')
+      setTotpStep('idle'); setTotpCode('')
+      setUser({ ...user!, totp_enabled: true })
+    } catch (err: any) {
+      setTotpErr(err.response?.data?.detail ?? 'Неверный код')
+    } finally {
+      setTotpLoading(false)
+    }
+  }
+
+  async function confirmTotpDisable(e: React.FormEvent) {
+    e.preventDefault()
+    setTotpErr(''); setTotpMsg('')
+    setTotpLoading(true)
+    try {
+      await api.post('/auth/2fa/disable', { secret: '', code: totpCode })
+      setTotpMsg('Двухфакторная аутентификация отключена')
+      setTotpStep('idle'); setTotpCode('')
+      setUser({ ...user!, totp_enabled: false })
+    } catch (err: any) {
+      setTotpErr(err.response?.data?.detail ?? 'Неверный код')
+    } finally {
+      setTotpLoading(false)
     }
   }
 
@@ -166,6 +225,93 @@ export default function ProfilePage() {
               {pwdLoading ? 'Смена…' : 'Сменить пароль'}
             </button>
           </form>
+        </div>
+
+        {/* 2FA */}
+        <div style={card}>
+          <h3 style={{ margin: '0 0 16px', fontSize: 15 }}>Двухфакторная аутентификация</h3>
+
+          {totpStep === 'idle' && (
+            <div>
+              <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 12 }}>
+                {user?.totp_enabled
+                  ? '2FA включена. Вы можете отключить её, введя код из приложения.'
+                  : '2FA не включена. Используйте приложение-аутентификатор (Google Authenticator, Authy) для повышения безопасности.'}
+              </p>
+              {totpMsg && <p style={{ color: '#4ade80', fontSize: 13, marginBottom: 10 }}>{totpMsg}</p>}
+              {totpErr && <p style={{ color: '#f87171', fontSize: 13, marginBottom: 10 }}>{totpErr}</p>}
+              {user?.totp_enabled ? (
+                <button style={{ ...btn, background: '#7f1d1d' }} onClick={() => { setTotpStep('disable'); setTotpErr(''); setTotpMsg('') }}>
+                  Отключить 2FA
+                </button>
+              ) : (
+                <button style={btn} onClick={startTotpSetup} disabled={totpLoading}>
+                  {totpLoading ? 'Загрузка…' : 'Включить 2FA'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {totpStep === 'setup' && (
+            <div>
+              <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 12 }}>
+                Отсканируйте QR-код в приложении-аутентификаторе или введите секрет вручную, затем введите 6-значный код для подтверждения.
+              </p>
+              <div style={{ marginBottom: 16, background: '#fff', display: 'inline-block', padding: 8, borderRadius: 8 }}>
+                <QRCodeSVG value={totpUri} size={200} />
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>Секрет: </span>
+                <code style={{ fontSize: 13, color: '#e2e8f0', background: '#0f172a', padding: '2px 8px', borderRadius: 4 }}>
+                  {totpSecret}
+                </code>
+              </div>
+              <form onSubmit={confirmTotpEnable} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <input
+                  style={{ ...inputStyle, width: 140, marginBottom: 0 }}
+                  type="text"
+                  placeholder="000000"
+                  maxLength={6}
+                  value={totpCode}
+                  onChange={e => setTotpCode(e.target.value)}
+                  required
+                />
+                <button style={btn} type="submit" disabled={totpLoading}>
+                  {totpLoading ? 'Проверка…' : 'Подтвердить'}
+                </button>
+                <button type="button" style={{ ...btn, background: '#334155' }} onClick={() => setTotpStep('idle')}>
+                  Отмена
+                </button>
+              </form>
+              {totpErr && <p style={{ color: '#f87171', fontSize: 13, marginTop: 10 }}>{totpErr}</p>}
+            </div>
+          )}
+
+          {totpStep === 'disable' && (
+            <div>
+              <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 12 }}>
+                Введите текущий код из приложения-аутентификатора для отключения 2FA.
+              </p>
+              <form onSubmit={confirmTotpDisable} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <input
+                  style={{ ...inputStyle, width: 140, marginBottom: 0 }}
+                  type="text"
+                  placeholder="000000"
+                  maxLength={6}
+                  value={totpCode}
+                  onChange={e => setTotpCode(e.target.value)}
+                  required
+                />
+                <button style={{ ...btn, background: '#7f1d1d' }} type="submit" disabled={totpLoading}>
+                  {totpLoading ? 'Отключение…' : 'Отключить'}
+                </button>
+                <button type="button" style={{ ...btn, background: '#334155' }} onClick={() => setTotpStep('idle')}>
+                  Отмена
+                </button>
+              </form>
+              {totpErr && <p style={{ color: '#f87171', fontSize: 13, marginTop: 10 }}>{totpErr}</p>}
+            </div>
+          )}
         </div>
 
       </main>

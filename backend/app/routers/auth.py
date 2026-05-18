@@ -62,11 +62,11 @@ async def enable_2fa(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    setup = auth_svc.setup_totp(current_user)
-    if not auth_svc.verify_totp_code(setup["secret"], data.code):
-        from fastapi import HTTPException, status
+    from fastapi import HTTPException, status
+    if not auth_svc.verify_totp_code(data.secret, data.code):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid TOTP code")
-    current_user.totp_secret = setup["secret"]
+    current_user.totp_secret = data.secret
+    await db.commit()
     return {"detail": "2FA enabled"}
 
 
@@ -109,9 +109,13 @@ async def oauth_github_redirect():
     return RedirectResponse(url)
 
 
-@router.get("/oauth/github/callback", response_model=TokenResponse)
+@router.get("/oauth/github/callback")
 async def oauth_github_callback(code: str, request: Request, db: AsyncSession = Depends(get_db)):
-    return await auth_svc.oauth_github_callback(code, request, db)
+    tokens = await auth_svc.oauth_github_callback(code, request, db)
+    base = str(request.base_url).rstrip("/")
+    return RedirectResponse(
+        f"{base}/oauth?access_token={tokens.access_token}&refresh_token={tokens.refresh_token}"
+    )
 
 
 @router.get("/oauth/google")
@@ -127,6 +131,10 @@ async def oauth_google_redirect(request: Request):
     return RedirectResponse(url)
 
 
-@router.get("/oauth/google/callback", response_model=TokenResponse)
+@router.get("/oauth/google/callback")
 async def oauth_google_callback(code: str, request: Request, db: AsyncSession = Depends(get_db)):
-    return await auth_svc.oauth_google_callback(code, request, db)
+    tokens = await auth_svc.oauth_google_callback(code, request, db)
+    base = str(request.base_url).rstrip("/")
+    return RedirectResponse(
+        f"{base}/oauth?access_token={tokens.access_token}&refresh_token={tokens.refresh_token}"
+    )

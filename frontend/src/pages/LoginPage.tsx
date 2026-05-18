@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAuthStore } from '../store/auth'
 
@@ -90,6 +90,10 @@ export default function LoginPage() {
             <span>Войти через: </span>
             <a href="/api/auth/oauth/github" style={{ marginRight: 12, color: '#94a3b8' }}>GitHub</a>
             <a href="/api/auth/oauth/google" style={{ color: '#94a3b8' }}>Google</a>
+          </div>
+          <div style={{ marginTop: 16, textAlign: 'center', fontSize: 13, color: '#64748b' }}>
+            Нет аккаунта?{' '}
+            <Link to="/register" style={{ color: '#60a5fa' }}>Зарегистрироваться</Link>
           </div>
         </form>
       )}

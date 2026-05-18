@@ -64,6 +64,7 @@ export default function Navbar({ title = 'DAST Analyzer', backTo, backLabel }: N
       </div>
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <button style={{ ...btn, background: '#334155' }} onClick={() => navigate('/wordlists')}>Словари</button>
         {user?.role === 'admin' && (
           <button style={btn} onClick={() => navigate('/admin')}>Администратор</button>
         )}

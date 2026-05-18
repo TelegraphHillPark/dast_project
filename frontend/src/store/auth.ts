@@ -7,6 +7,7 @@ interface AuthUser {
   username: string
   role: string
   avatar_url: string | null
+  totp_enabled?: boolean
 }
 
 interface AuthState {

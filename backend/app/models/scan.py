@@ -12,6 +12,7 @@ class ScanStatus(str, enum.Enum):
     paused = "paused"
     finished = "finished"
     failed = "failed"
+    cancelled = "cancelled"
 
 
 class Scan(Base):
