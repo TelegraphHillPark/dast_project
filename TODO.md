@@ -1,1 +1,1 @@
-1. First sprint is over. TODO: graphical endpoints
+1. Доделать третий спринт
