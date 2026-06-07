@@ -49,12 +49,11 @@ jobs:
             git pull origin main
 
             # Пересобираем и поднимаем
-            docker compose -f docker-compose.prod.yml pull --ignore-pull-failures
-            docker compose -f docker-compose.prod.yml build --no-cache
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker compose -f docker-compose.prod.yml --env-file .env build --no-cache
+            docker compose -f docker-compose.prod.yml --env-file .env up -d --remove-orphans
 
             # Применяем миграции БД
-            docker compose -f docker-compose.prod.yml exec -T backend alembic upgrade head
+            docker compose -f docker-compose.prod.yml --env-file .env exec -T backend alembic upgrade head
 
             # Чистим старые образы
             docker image prune -f
