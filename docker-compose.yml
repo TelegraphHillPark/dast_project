@@ -49,6 +49,7 @@ services:
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
     volumes:
       - uploads_data:/app/uploads
+      - wordlists_data:/app/wordlists
     depends_on:
       db:
         condition: service_healthy
@@ -60,6 +61,12 @@ services:
       - "8000"
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   worker:
     build:
@@ -73,15 +80,20 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       SECRET_KEY: ${SECRET_KEY}
       ENVIRONMENT: ${ENVIRONMENT:-production}
+    volumes:
+      - wordlists_data:/app/wordlists
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+      backend:
+        condition: service_healthy
     networks:
       - dast_internal
 
   nginx:
+    
     build:
       context: .
       dockerfile: docker/nginx/Dockerfile
@@ -91,7 +103,8 @@ services:
       - "80:80"
       - "443:443"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - dast_internal
 
@@ -99,6 +112,7 @@ volumes:
   postgres_data:
   redis_data:
   uploads_data:
+  wordlists_data:
 
 networks:
   dast_internal:

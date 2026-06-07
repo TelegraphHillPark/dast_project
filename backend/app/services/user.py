@@ -19,6 +19,13 @@ from app.models.user import User
 from app.schemas.user import ChangePasswordRequest, UserUpdate, AdminUserUpdate
 
 
+async def admin_list_all_sessions(db: AsyncSession) -> list[UserSession]:
+    result = await db.execute(
+        select(UserSession).where(UserSession.is_active == True).order_by(UserSession.created_at.desc())
+    )
+    return result.scalars().all()
+
+
 async def get_user_sessions(user_id: str, db: AsyncSession) -> list[UserSession]:
     result = await db.execute(
         select(UserSession).where(UserSession.user_id == user_id, UserSession.is_active == True)
@@ -35,6 +42,7 @@ async def deactivate_session(session_id: str, db: AsyncSession, owner_id: str | 
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
     session.is_active = False
+    await db.commit()
 
 
 async def change_password(user: User, data: ChangePasswordRequest, db: AsyncSession) -> None:

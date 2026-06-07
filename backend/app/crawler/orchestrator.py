@@ -13,7 +13,13 @@ from datetime import datetime, timezone
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.crawler.analyzers import Baseline, HeuristicAnalyzer, SignatureAnalyzer
+from app.crawler.analyzers import (
+    Baseline,
+    HeuristicAnalyzer,
+    SecurityHeadersAnalyzer,
+    SignatureAnalyzer,
+    build_curl,
+)
 from app.crawler.auth_manager import AuthManager
 from app.crawler.crawler import AsyncCrawler, CrawlResult
 from app.crawler.payload_engine import PayloadEngine
@@ -100,6 +106,11 @@ class ScanOrchestrator:
             if len(result.visited_urls) > 50:
                 await slog(scan.id, f"  … и ещё {len(result.visited_urls) - 50} страниц", "crawl")
 
+            # ── Phase 1.5: Security headers check ──────────────────────────
+            if not self._stop_event.is_set():
+                await slog(scan.id, "Фаза 1.5: проверка заголовков безопасности…", "attack")
+                await self._run_header_checks(scan, result)
+
             # ── Phase 2: Attack ─────────────────────────────────────────────
             if not self._stop_event.is_set():
                 await slog(scan.id, "Фаза 2: атака (payload injection)…", "attack")
@@ -138,7 +149,22 @@ class ScanOrchestrator:
     # ── Private: attack phase ──────────────────────────────────────────────────
 
     async def _run_attacks(self, scan: Scan, result: CrawlResult) -> None:
-        engine = PayloadEngine()
+        import os as _os
+        from sqlalchemy import select as _select
+        from app.models.wordlist import Wordlist
+
+        wl_result = await self.db.execute(
+            _select(Wordlist).where(
+                Wordlist.owner_id == scan.owner_id,
+                Wordlist.is_builtin == False,  # noqa: E712
+            )
+        )
+        user_wordlists = wl_result.scalars().all()
+        extra_paths = [w.file_path for w in user_wordlists if _os.path.exists(w.file_path)]
+        if extra_paths:
+            await slog(scan.id, f"Пользовательские словари ({len(extra_paths)}): {[_os.path.basename(p) for p in extra_paths]}", "attack")
+
+        engine = PayloadEngine(extra_wordlist_paths=extra_paths)
         sig = SignatureAnalyzer()
         heur = HeuristicAnalyzer()
 
@@ -255,7 +281,19 @@ class ScanOrchestrator:
                         parameter=target.param,
                         method="GET",
                         payload=target.payload,
-                        evidence={**finding.evidence, "confidence": finding.confidence},
+                        evidence={
+                            **finding.evidence,
+                            "confidence": finding.confidence,
+                            "request_url": target.test_url,
+                            "curl": build_curl(
+                                "GET", target.test_url,
+                                cookies=attack_cookies,
+                                headers={k: v for k, v in attack_headers.items()
+                                         if k.lower() != "user-agent"},
+                            ),
+                            "cwe": finding.cwe,
+                            "owasp": finding.owasp,
+                        },
                         recommendation=finding.recommendation,
                     ))
                     vuln_count += 1
@@ -308,7 +346,20 @@ class ScanOrchestrator:
                         parameter=target.field,
                         method=target.method,
                         payload=target.payload,
-                        evidence={**finding.evidence, "confidence": finding.confidence},
+                        evidence={
+                            **finding.evidence,
+                            "confidence": finding.confidence,
+                            "request_data": target.data,
+                            "curl": build_curl(
+                                "POST", target.action,
+                                data=target.data,
+                                cookies=attack_cookies,
+                                headers={k: v for k, v in attack_headers.items()
+                                         if k.lower() != "user-agent"},
+                            ),
+                            "cwe": finding.cwe,
+                            "owasp": finding.owasp,
+                        },
                         recommendation=finding.recommendation,
                     ))
                     vuln_count += 1
@@ -316,6 +367,57 @@ class ScanOrchestrator:
         await self.db.commit()
         await slog(scan.id, f"Атака завершена. Найдено уязвимостей: {vuln_count}", "attack")
         logger.info("Scan %s attack phase done — %d vulnerabilities found", scan.id, vuln_count)
+
+    async def _run_header_checks(self, scan: Scan, result: CrawlResult) -> None:
+        """
+        Request each visited URL (up to 50) and report missing security headers.
+        Deduplicates findings by (url, missing_header) pair.
+        """
+        from app.models.vulnerability import VulnType, VulnSeverity
+
+        analyzer = SecurityHeadersAnalyzer()
+        seen_headers: set[tuple[str, str]] = set()
+        found = 0
+
+        urls_to_check = sorted(result.visited_urls)[:50]
+        if not urls_to_check:
+            urls_to_check = [scan.target_url]
+
+        async with httpx.AsyncClient(verify=False, timeout=10.0, follow_redirects=True) as client:
+            for url in urls_to_check:
+                if self._stop_event.is_set():
+                    break
+                try:
+                    resp = await client.get(url)
+                except Exception as e:
+                    logger.debug("Header check failed for %s: %s", url, e)
+                    continue
+
+                for finding in analyzer.analyze(url, resp):
+                    key = (url, finding.evidence.get("missing_header", ""))
+                    if key in seen_headers:
+                        continue
+                    seen_headers.add(key)
+                    self.db.add(Vulnerability(
+                        scan_id=scan.id,
+                        vuln_type=finding.vuln_type,
+                        severity=finding.severity,
+                        url=url,
+                        parameter=None,
+                        method="GET",
+                        payload=None,
+                        evidence={
+                            **finding.evidence,
+                            "confidence": finding.confidence,
+                            "cwe": finding.cwe,
+                            "owasp": finding.owasp,
+                        },
+                        recommendation=finding.recommendation,
+                    ))
+                    found += 1
+
+        await self.db.commit()
+        await slog(scan.id, f"Проверка заголовков завершена. Найдено: {found}", "attack")
 
     @staticmethod
     async def _baseline_get(client: httpx.AsyncClient, url: str) -> Baseline | None:

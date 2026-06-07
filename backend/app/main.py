@@ -2,9 +2,11 @@ import logging
 import logging.config
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -47,9 +49,11 @@ logger = logging.getLogger("dast.app")
 async def lifespan(app: FastAPI):
     logger.info("Starting %s v%s [%s]", settings.APP_NAME, settings.APP_VERSION, settings.ENVIRONMENT)
     # Создаём таблицы только в dev (в prod используем Alembic)
+    """
     if settings.ENVIRONMENT == "development":
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+    """
     yield
     await engine.dispose()
     logger.info("Shutdown complete")
@@ -66,6 +70,20 @@ app = FastAPI(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    # pydantic v2 errors may contain non-serializable objects in ctx (e.g. ValueError)
+    errors = []
+    for err in exc.errors():
+        err = dict(err)
+        if "ctx" in err:
+            err["ctx"] = {k: str(v) for k, v in err["ctx"].items()}
+        errors.append(err)
+    logger.warning("422 Validation error | %s %s | errors: %s",
+                   request.method, request.url.path, errors)
+    return JSONResponse(status_code=422, content={"detail": errors})
 
 # ── Middleware (порядок важен: внешний → внутренний) ─────────────────────────
 
@@ -101,6 +119,6 @@ async def health():
 
 # Раздача загруженных файлов (аватары и т.д.)
 import os as _os
-_uploads_dir = "/app/uploads"
+_uploads_dir = settings.UPLOADS_DIR
 _os.makedirs(_uploads_dir, exist_ok=True)
 app.mount("/api/uploads", StaticFiles(directory=_uploads_dir), name="uploads")

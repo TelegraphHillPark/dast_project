@@ -59,6 +59,7 @@ async def pause_scan(scan_id: str, owner_id: str, db: AsyncSession) -> Scan:
     if scan.status != ScanStatus.running:
         raise HTTPException(status_code=400, detail="Scan is not running")
     scan.status = ScanStatus.paused
+    await db.commit()
     return scan
 
 
@@ -67,6 +68,7 @@ async def resume_scan(scan_id: str, owner_id: str, db: AsyncSession) -> Scan:
     if scan.status != ScanStatus.paused:
         raise HTTPException(status_code=400, detail="Scan is not paused")
     scan.status = ScanStatus.pending
+    await db.commit()
 
     r = aioredis.from_url(settings.REDIS_URL)
     try:
@@ -84,6 +86,7 @@ async def cancel_scan(scan_id: str, owner_id: str, db: AsyncSession) -> Scan:
         raise HTTPException(status_code=400, detail="Scan cannot be cancelled in its current state")
     scan.status = ScanStatus.cancelled
     scan.finished_at = datetime.now(timezone.utc)
+    await db.commit()
     return scan
 
 

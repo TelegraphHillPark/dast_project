@@ -14,6 +14,15 @@ interface ApiToken {
   created_at: string
 }
 
+interface Session {
+  id: string
+  ip_address: string | null
+  user_agent: string | null
+  created_at: string
+  expires_at: string
+  is_active: boolean
+}
+
 export default function ProfilePage() {
   const { user, setUser } = useAuthStore()
 
@@ -52,8 +61,13 @@ export default function ProfilePage() {
   const [tokenErr, setTokenErr] = useState('')
   const [tokenLoading, setTokenLoading] = useState(false)
 
+  // ── Sessions ──────────────────────────────────────────────────────────────
+  const [sessions, setSessions] = useState<Session[]>([])
+  const [sessionErr, setSessionErr] = useState('')
+
   useEffect(() => {
     api.get('/users/me/tokens').then(r => setTokens(r.data)).catch(() => {})
+    api.get('/users/me/sessions').then(r => setSessions(r.data)).catch(() => {})
   }, [])
 
   async function handleProfileSave(e: React.FormEvent) {
@@ -176,6 +190,16 @@ export default function ProfilePage() {
       if (createdToken) setCreatedToken('')
     } catch {
       setTokenErr('Ошибка отзыва токена')
+    }
+  }
+
+  async function handleRevokeSession(id: string) {
+    setSessionErr('')
+    try {
+      await api.delete(`/users/me/sessions/${id}`)
+      setSessions(s => s.filter(x => x.id !== id))
+    } catch {
+      setSessionErr('Ошибка отзыва сессии')
     }
   }
 
@@ -411,6 +435,46 @@ export default function ProfilePage() {
                   <button
                     onClick={() => handleRevokeToken(t.id)}
                     style={{ ...btn, background: '#7f1d1d', fontSize: 12, padding: '5px 12px' }}
+                  >
+                    Отозвать
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Sessions */}
+        <div style={card}>
+          <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>Активные сессии</h3>
+          <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
+            Список всех активных сессий вашего аккаунта. Отзовите подозрительные.
+          </p>
+
+          {sessionErr && <p style={{ color: '#f87171', fontSize: 12, marginBottom: 10 }}>{sessionErr}</p>}
+
+          {sessions.length === 0 ? (
+            <p style={{ fontSize: 13, color: '#475569' }}>Нет активных сессий</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {sessions.map(s => (
+                <div key={s.id} style={{
+                  display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+                  background: '#0f172a', borderRadius: 6, padding: '10px 14px', gap: 12,
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, color: '#e2e8f0', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {s.user_agent ?? 'Неизвестный клиент'}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#475569' }}>
+                      IP: {s.ip_address ?? '—'}
+                      {' · '}Создана: {new Date(s.created_at).toLocaleString('ru-RU')}
+                      {' · '}Истекает: {new Date(s.expires_at).toLocaleString('ru-RU')}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleRevokeSession(s.id)}
+                    style={{ ...btn, background: '#7f1d1d', fontSize: 12, padding: '5px 12px', flexShrink: 0 }}
                   >
                     Отозвать
                   </button>

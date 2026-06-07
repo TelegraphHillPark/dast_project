@@ -56,6 +56,16 @@ class SessionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AdminSessionOut(BaseModel):
+    id: str
+    user_id: str
+    username: str
+    ip_address: str | None
+    user_agent: str | None
+    created_at: datetime
+    expires_at: datetime
+
+
 class AdminUserUpdate(BaseModel):
     role: UserRole | None = None
     is_active: bool | None = None

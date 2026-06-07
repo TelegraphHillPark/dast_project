@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import os
 import re
 
@@ -33,7 +31,7 @@ async def upload_wordlist(
     """Upload a custom payload wordlist (.txt).
 
     Returns 415 if the file is not plain text.
-    Returns 413 if the file exceeds MAX_UPLOAD_SIZE_BYTES (1 GB by default).
+    Returns 413 if the file exceeds MAX_UPLOAD_SIZE_BYTES (10 GB by default).
     Streams the file to disk to support files up to 1 GB without loading into memory.
     """
     # 415 — type check

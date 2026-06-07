@@ -34,8 +34,9 @@ class Settings(BaseSettings):
     GITHUB_CLIENT_SECRET: str = ""
 
     # File uploads
-    MAX_UPLOAD_SIZE_BYTES: int = 1 * 1024 * 1024 * 1024  # 1 GB
+    MAX_UPLOAD_SIZE_BYTES: int = 10 * 1024 * 1024 * 1024  # 10 GB
     WORDLISTS_DIR: str = "/app/wordlists"
+    UPLOADS_DIR: str = "/app/uploads"
 
     # Rate limiting
     RATE_LIMIT_PER_MINUTE: int = 60

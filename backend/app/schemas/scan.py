@@ -1,9 +1,7 @@
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.scan import ScanStatus
 from app.models.vulnerability import VulnSeverity, VulnType
@@ -22,6 +20,13 @@ class AuthConfig(BaseModel):
 
 class ScanCreate(BaseModel):
     target_url: str = Field(..., min_length=1, max_length=2048)
+
+    @field_validator('target_url')
+    @classmethod
+    def target_url_must_be_http(cls, v: str) -> str:
+        if not v.startswith(('http://', 'https://')):
+            raise ValueError('target_url must start with http:// or https://')
+        return v
     max_depth: int = Field(3, ge=1, le=10)
     timeout_seconds: int = Field(3600, ge=60, le=86400)
     excluded_paths: list[str] = []

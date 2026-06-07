@@ -4,7 +4,8 @@ Signature and Heuristic analyzers for HTTP responses.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+import shlex
+from dataclasses import dataclass, field
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -13,6 +14,32 @@ import httpx
 from app.models.vulnerability import VulnSeverity, VulnType
 
 logger = logging.getLogger("dast.analyzer")
+
+# ── CWE / OWASP mappings ───────────────────────────────────────────────────────
+
+_CWE: dict[VulnType, str] = {
+    VulnType.sqli:                    "CWE-89",
+    VulnType.xss:                     "CWE-79",
+    VulnType.ssrf:                    "CWE-918",
+    VulnType.open_redirect:           "CWE-601",
+    VulnType.header_injection:        "CWE-113",
+    VulnType.broken_auth:             "CWE-287",
+    VulnType.sensitive_data:          "CWE-200",
+    VulnType.security_misconfiguration: "CWE-16",
+    VulnType.other:                   "CWE-1035",
+}
+
+_OWASP: dict[VulnType, str] = {
+    VulnType.sqli:                    "A03:2021 Injection",
+    VulnType.xss:                     "A03:2021 Injection",
+    VulnType.ssrf:                    "A10:2021 Server-Side Request Forgery",
+    VulnType.open_redirect:           "A01:2021 Broken Access Control",
+    VulnType.header_injection:        "A03:2021 Injection",
+    VulnType.broken_auth:             "A07:2021 Identification and Authentication Failures",
+    VulnType.sensitive_data:          "A02:2021 Cryptographic Failures",
+    VulnType.security_misconfiguration: "A05:2021 Security Misconfiguration",
+    VulnType.other:                   "A05:2021 Security Misconfiguration",
+}
 
 # ── Signature databases ────────────────────────────────────────────────────────
 
@@ -37,6 +64,7 @@ _SEVERITY: dict[VulnType, VulnSeverity] = {
     VulnType.ssrf: VulnSeverity.high,
     VulnType.open_redirect: VulnSeverity.medium,
     VulnType.header_injection: VulnSeverity.medium,
+    VulnType.security_misconfiguration: VulnSeverity.low,
 }
 
 _RECOMMENDATIONS: dict[VulnType, str] = {
@@ -60,7 +88,103 @@ _RECOMMENDATIONS: dict[VulnType, str] = {
         "Strip or reject CR and LF characters from any value "
         "that will be placed into an HTTP response header."
     ),
+    VulnType.security_misconfiguration: (
+        "Add the missing security header to all HTTP responses."
+    ),
 }
+
+# ── Security headers catalogue ─────────────────────────────────────────────────
+
+_SECURITY_HEADERS: list[dict] = [
+    {
+        "header": "content-security-policy",
+        "display": "Content-Security-Policy",
+        "severity": VulnSeverity.medium,
+        "cwe": "CWE-1021",
+        "recommendation": (
+            "Add Content-Security-Policy header to restrict allowed sources "
+            "of scripts, styles, and other resources. "
+            "Example: Content-Security-Policy: default-src 'self'"
+        ),
+    },
+    {
+        "header": "x-frame-options",
+        "display": "X-Frame-Options",
+        "severity": VulnSeverity.medium,
+        "cwe": "CWE-1021",
+        "recommendation": (
+            "Add X-Frame-Options: DENY or SAMEORIGIN to prevent clickjacking attacks."
+        ),
+    },
+    {
+        "header": "strict-transport-security",
+        "display": "Strict-Transport-Security",
+        "severity": VulnSeverity.medium,
+        "cwe": "CWE-319",
+        "recommendation": (
+            "Add Strict-Transport-Security: max-age=31536000; includeSubDomains "
+            "to enforce HTTPS connections."
+        ),
+    },
+    {
+        "header": "x-content-type-options",
+        "display": "X-Content-Type-Options",
+        "severity": VulnSeverity.low,
+        "cwe": "CWE-16",
+        "recommendation": (
+            "Add X-Content-Type-Options: nosniff to prevent MIME-type sniffing."
+        ),
+    },
+    {
+        "header": "referrer-policy",
+        "display": "Referrer-Policy",
+        "severity": VulnSeverity.low,
+        "cwe": "CWE-200",
+        "recommendation": (
+            "Add Referrer-Policy: strict-origin-when-cross-origin "
+            "to control referrer information."
+        ),
+    },
+    {
+        "header": "permissions-policy",
+        "display": "Permissions-Policy",
+        "severity": VulnSeverity.low,
+        "cwe": "CWE-16",
+        "recommendation": (
+            "Add Permissions-Policy header to restrict browser features "
+            "such as camera, microphone, geolocation."
+        ),
+    },
+]
+
+# ── curl command builder ───────────────────────────────────────────────────────
+
+def build_curl(
+    method: str,
+    url: str,
+    data: dict | None = None,
+    cookies: dict | None = None,
+    headers: dict | None = None,
+) -> str:
+    parts = ["curl", "-X", method.upper(), shlex.quote(url)]
+
+    if headers:
+        for k, v in headers.items():
+            if k.lower() != "user-agent":
+                parts += ["-H", shlex.quote(f"{k}: {v}")]
+    parts += ["-H", shlex.quote("User-Agent: DAST-Analyzer/0.1")]
+
+    if cookies:
+        cookie_str = "; ".join(f"{k}={v}" for k, v in cookies.items())
+        parts += ["-b", shlex.quote(cookie_str)]
+
+    if data and method.upper() == "POST":
+        form_str = "&".join(f"{k}={v}" for k, v in data.items())
+        parts += ["--data", shlex.quote(form_str)]
+
+    parts.append("-k")  # allow self-signed certs
+    return " ".join(parts)
+
 
 # ── Shared result type ─────────────────────────────────────────────────────────
 
@@ -71,6 +195,14 @@ class Finding:
     confidence: str          # "high" | "low"
     evidence: dict
     recommendation: str
+    cwe: str = field(default="")
+    owasp: str = field(default="")
+
+    def __post_init__(self):
+        if not self.cwe:
+            self.cwe = _CWE.get(self.vuln_type, "")
+        if not self.owasp:
+            self.owasp = _OWASP.get(self.vuln_type, "")
 
 
 # ── Signature analyzer ─────────────────────────────────────────────────────────
@@ -87,6 +219,9 @@ class SignatureAnalyzer:
         body_lower = response.text.lower()
         headers = {k.lower(): v for k, v in response.headers.items()}
 
+        body_snippet = response.text[:500] if response.text else ""
+        status = response.status_code
+
         if vuln_type == VulnType.sqli:
             for sig in _SQLI_SIGNATURES:
                 if sig in body_lower:
@@ -94,7 +229,11 @@ class SignatureAnalyzer:
                         vuln_type=vuln_type,
                         severity=VulnSeverity.high,
                         confidence="high",
-                        evidence={"signature": sig, "status": response.status_code},
+                        evidence={
+                            "signature": sig,
+                            "status_code": status,
+                            "body_snippet": body_snippet,
+                        },
                         recommendation=_RECOMMENDATIONS[vuln_type],
                     )
 
@@ -104,15 +243,15 @@ class SignatureAnalyzer:
                     vuln_type=vuln_type,
                     severity=VulnSeverity.medium,
                     confidence="high",
-                    evidence={"reflected_payload": payload, "status": response.status_code},
+                    evidence={
+                        "reflected_payload": payload,
+                        "status_code": status,
+                        "body_snippet": body_snippet,
+                    },
                     recommendation=_RECOMMENDATIONS[vuln_type],
                 )
 
         elif vuln_type == VulnType.open_redirect:
-            # With follow_redirects=True the final response has no Location header.
-            # Check redirect history instead: only flag when evil.com is the netloc
-            # (real external redirect), not when it appears in the query string of
-            # an Apache trailing-slash 301 like /path/?param=//evil.com.
             for hist in response.history:
                 loc = hist.headers.get("location", "")
                 if loc and "evil.com" in urlparse(loc).netloc:
@@ -120,30 +259,39 @@ class SignatureAnalyzer:
                         vuln_type=vuln_type,
                         severity=VulnSeverity.medium,
                         confidence="high",
-                        evidence={"location": loc, "status": hist.status_code},
+                        evidence={
+                            "location": loc,
+                            "status_code": hist.status_code,
+                            "body_snippet": body_snippet,
+                        },
                         recommendation=_RECOMMENDATIONS[vuln_type],
                     )
-            # Fallback: scanner followed the redirect and landed on evil.com
             if "evil.com" in response.url.host:
                 return Finding(
                     vuln_type=vuln_type,
                     severity=VulnSeverity.medium,
                     confidence="high",
-                    evidence={"final_url": str(response.url), "status": response.status_code},
+                    evidence={
+                        "final_url": str(response.url),
+                        "status_code": status,
+                        "body_snippet": body_snippet,
+                    },
                     recommendation=_RECOMMENDATIONS[vuln_type],
                 )
 
         elif vuln_type == VulnType.ssrf:
             payload_lower = payload.lower()
             for sig in _SSRF_SIGNATURES:
-                # Skip if the signature appears only because the payload itself contains it
-                # (e.g. a reflected SSRF URL payload like http://.../iam/security-credentials/)
                 if sig in body_lower and sig not in payload_lower:
                     return Finding(
                         vuln_type=vuln_type,
                         severity=VulnSeverity.high,
                         confidence="high",
-                        evidence={"signature": sig, "status": response.status_code},
+                        evidence={
+                            "signature": sig,
+                            "status_code": status,
+                            "body_snippet": body_snippet,
+                        },
                         recommendation=_RECOMMENDATIONS[vuln_type],
                     )
 
@@ -155,7 +303,8 @@ class SignatureAnalyzer:
                     confidence="high",
                     evidence={
                         "injected_header_value": headers["x-injected"],
-                        "status": response.status_code,
+                        "status_code": status,
+                        "body_snippet": body_snippet,
                     },
                     recommendation=_RECOMMENDATIONS[vuln_type],
                 )
@@ -193,7 +342,6 @@ class HeuristicAnalyzer:
         body_size = len(response.content)
         if baseline.body_size > 0:
             diff_pct = abs(body_size - baseline.body_size) / baseline.body_size
-            # Require >50% size change AND >200 bytes absolute to reduce false positives
             if diff_pct > 0.50 and abs(body_size - baseline.body_size) > 200:
                 anomalies.append(
                     f"Response body size changed {baseline.body_size} → {body_size} "
@@ -216,8 +364,41 @@ class HeuristicAnalyzer:
             evidence={
                 "anomalies": anomalies,
                 "payload": payload,
-                "status": response.status_code,
+                "status_code": response.status_code,
+                "body_snippet": response.text[:500] if response.text else "",
             },
             recommendation=_RECOMMENDATIONS.get(vuln_type, "Review manually.")
             + " (requires manual verification)",
         )
+
+
+# ── Security headers analyzer ──────────────────────────────────────────────────
+
+class SecurityHeadersAnalyzer:
+    """
+    Checks a single HTTP response for missing security headers.
+    Returns one Finding per missing header.
+    """
+
+    def analyze(self, url: str, response: httpx.Response) -> list[Finding]:
+        present = {k.lower() for k in response.headers}
+        findings: list[Finding] = []
+
+        for spec in _SECURITY_HEADERS:
+            if spec["header"] not in present:
+                findings.append(Finding(
+                    vuln_type=VulnType.security_misconfiguration,
+                    severity=spec["severity"],
+                    confidence="high",
+                    evidence={
+                        "missing_header": spec["display"],
+                        "status_code": response.status_code,
+                        "url": url,
+                        "curl": build_curl("GET", url),
+                    },
+                    recommendation=spec["recommendation"],
+                    cwe=spec["cwe"],
+                    owasp=_OWASP[VulnType.security_misconfiguration],
+                ))
+
+        return findings

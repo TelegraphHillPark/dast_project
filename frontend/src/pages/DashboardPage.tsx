@@ -6,7 +6,7 @@ import Navbar from '../components/Navbar'
 interface ScanItem {
   id: string
   target_url: string
-  status: 'pending' | 'running' | 'paused' | 'finished' | 'failed'
+  status: 'pending' | 'running' | 'paused' | 'finished' | 'failed' | 'cancelled'
   max_depth: number
   created_at: string
   started_at: string | null
@@ -20,6 +20,7 @@ const STATUS_LABEL: Record<ScanItem['status'], string> = {
   paused: 'Приостановлен',
   finished: 'Завершён',
   failed: 'Ошибка',
+  cancelled: 'Остановлен',
 }
 
 const STATUS_COLOR: Record<ScanItem['status'], string> = {
@@ -28,6 +29,7 @@ const STATUS_COLOR: Record<ScanItem['status'], string> = {
   paused: '#d97706',
   finished: '#16a34a',
   failed: '#dc2626',
+  cancelled: '#7c3aed',
 }
 
 export default function DashboardPage() {

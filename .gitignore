@@ -40,3 +40,4 @@ backend/wordlists/*.json
 
 .claude/
 COMMIT_MSG.txt
+.env.prod

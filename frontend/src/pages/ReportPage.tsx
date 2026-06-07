@@ -52,6 +52,10 @@ const VULN_LABEL: Record<string, string> = {
   ssrf: 'SSRF',
   open_redirect: 'Открытый редирект',
   header_injection: 'Header Injection',
+  broken_auth: 'Broken Auth',
+  sensitive_data: 'Утечка данных',
+  security_misconfiguration: 'Неверная конфигурация',
+  other: 'Другое',
 }
 
 const SEV_LABEL: Record<string, string> = {
@@ -62,35 +66,156 @@ const SEV_LABEL: Record<string, string> = {
   info: 'Информационная',
 }
 
-function EvidenceDetails({ vuln }: { vuln: ReportVuln }) {
-  const rows: [string, string][] = []
-  if (vuln.payload) rows.push(['Payload', vuln.payload])
-  if (vuln.evidence) {
-    const { confidence, ...rest } = vuln.evidence
-    for (const [k, v] of Object.entries(rest)) {
-      if (v !== null && v !== undefined) rows.push([k, String(v)])
-    }
-  }
-  if (rows.length === 0) return <span style={{ color: '#475569' }}>нет данных</span>
+// ── Evidence detail renderer ───────────────────────────────────────────────────
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
   return (
-    <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%' }}>
-      <tbody>
-        {rows.map(([k, v]) => (
-          <tr key={k}>
-            <td style={{ color: '#64748b', paddingRight: 12, whiteSpace: 'nowrap', verticalAlign: 'top', paddingBottom: 4 }}>{k}</td>
-            <td style={{ fontFamily: 'monospace', color: '#e2e8f0', wordBreak: 'break-all' }}>{v}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <button
+      onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
+      style={{
+        padding: '2px 8px', fontSize: 11, borderRadius: 4, border: 'none',
+        background: copied ? '#166534' : '#334155', color: copied ? '#4ade80' : '#94a3b8',
+        cursor: 'pointer', marginLeft: 8, flexShrink: 0,
+      }}
+    >
+      {copied ? '✓ скопировано' : 'копировать'}
+    </button>
   )
 }
+
+function StatusBadge({ code }: { code: number }) {
+  const color = code >= 500 ? '#dc2626' : code >= 400 ? '#d97706' : code >= 300 ? '#2563eb' : '#16a34a'
+  return (
+    <span style={{
+      padding: '1px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+      background: color + '22', color, border: `1px solid ${color}44`,
+    }}>
+      HTTP {code}
+    </span>
+  )
+}
+
+function CweBadge({ cwe }: { cwe: string }) {
+  if (!cwe) return null
+  const url = `https://cwe.mitre.org/data/definitions/${cwe.replace('CWE-', '')}.html`
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" style={{
+      padding: '1px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+      background: '#7c3aed22', color: '#a78bfa', border: '1px solid #7c3aed44',
+      textDecoration: 'none', display: 'inline-block',
+    }}>
+      {cwe} ↗
+    </a>
+  )
+}
+
+function EvidenceDetails({ vuln }: { vuln: ReportVuln }) {
+  const ev = vuln.evidence ?? {}
+
+  // fields rendered specially — skip in generic table
+  const SPECIAL = new Set(['curl', 'cwe', 'owasp', 'status_code', 'anomalies', 'body_snippet', 'confidence', 'missing_header'])
+
+  const generic: [string, string][] = []
+  if (vuln.payload) generic.push(['Payload', vuln.payload])
+  for (const [k, v] of Object.entries(ev)) {
+    if (!SPECIAL.has(k) && v !== null && v !== undefined) {
+      generic.push([k, typeof v === 'object' ? JSON.stringify(v) : String(v)])
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+      {/* Badges row */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        {ev.status_code != null && <StatusBadge code={ev.status_code} />}
+        {ev.cwe && <CweBadge cwe={ev.cwe} />}
+        {ev.owasp && (
+          <span style={{
+            padding: '1px 8px', borderRadius: 10, fontSize: 11,
+            background: '#0f172a', color: '#94a3b8', border: '1px solid #334155',
+          }}>
+            {ev.owasp}
+          </span>
+        )}
+        {ev.missing_header && (
+          <span style={{
+            padding: '1px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+            background: '#d9770622', color: '#fbbf24', border: '1px solid #d9770644',
+          }}>
+            ⚠ Отсутствует: {ev.missing_header}
+          </span>
+        )}
+      </div>
+
+      {/* Anomalies list */}
+      {Array.isArray(ev.anomalies) && ev.anomalies.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Аномалии</div>
+          <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: '#fbbf24' }}>
+            {ev.anomalies.map((a: string, i: number) => <li key={i}>{a}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {/* Generic key-value pairs */}
+      {generic.length > 0 && (
+        <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%' }}>
+          <tbody>
+            {generic.map(([k, v]) => (
+              <tr key={k}>
+                <td style={{ color: '#64748b', paddingRight: 12, whiteSpace: 'nowrap', verticalAlign: 'top', paddingBottom: 4, width: 1 }}>{k}</td>
+                <td style={{ fontFamily: 'monospace', color: '#e2e8f0', wordBreak: 'break-all' }}>{v}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* Body snippet */}
+      {ev.body_snippet && (
+        <div>
+          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Фрагмент ответа</div>
+          <pre style={{
+            margin: 0, padding: '8px 12px', background: '#0f172a', borderRadius: 6,
+            fontSize: 11, color: '#94a3b8', overflowX: 'auto', maxHeight: 160,
+            border: '1px solid #1e293b', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+          }}>
+            {ev.body_snippet}
+          </pre>
+        </div>
+      )}
+
+      {/* curl command */}
+      {ev.curl && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
+            <span style={{ fontSize: 11, color: '#64748b' }}>curl команда для воспроизведения</span>
+            <CopyButton text={ev.curl} />
+          </div>
+          <pre style={{
+            margin: 0, padding: '8px 12px', background: '#0f172a', borderRadius: 6,
+            fontSize: 11, color: '#4ade80', overflowX: 'auto',
+            border: '1px solid #1e293b', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+          }}>
+            {ev.curl}
+          </pre>
+        </div>
+      )}
+
+    </div>
+  )
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ReportPage() {
   const { id } = useParams<{ id: string }>()
   const [report, setReport] = useState<Report | null>(null)
   const [error, setError] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [filter, setFilter] = useState<string>('all')
 
   const toggleRow = useCallback((vid: string) => {
     setExpanded(prev => {
@@ -147,6 +272,11 @@ export default function ReportPage() {
     </div>
   )
 
+  const severities = ['critical', 'high', 'medium', 'low', 'info']
+  const visibleVulns = filter === 'all'
+    ? report.vulnerabilities
+    : report.vulnerabilities.filter(v => v.severity === filter)
+
   return (
     <div>
       <Navbar title="Отчёт о сканировании" backTo={`/scans/${id}`} backLabel="← К сканированию" />
@@ -197,20 +327,36 @@ export default function ReportPage() {
           )}
         </div>
 
-        {/* Severity breakdown */}
+        {/* Severity breakdown + filter */}
         {Object.keys(report.summary.by_severity).length > 0 && (
           <div style={card}>
             <h3 style={{ margin: '0 0 16px', fontSize: 15 }}>По критичности</h3>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              {Object.entries(report.summary.by_severity).map(([sev, count]) => (
-                <div key={sev} style={{
-                  padding: '8px 20px', borderRadius: 8, fontSize: 14, fontWeight: 700,
-                  background: (SEV_COLOR[sev] ?? '#64748b') + '22',
-                  color: SEV_COLOR[sev] ?? '#64748b',
-                  border: `1px solid ${(SEV_COLOR[sev] ?? '#64748b')}44`,
-                }}>
-                  {count} {SEV_LABEL[sev] ?? sev}
-                </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                onClick={() => setFilter('all')}
+                style={{
+                  padding: '6px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                  border: '1px solid #334155', cursor: 'pointer',
+                  background: filter === 'all' ? '#1e40af' : '#1e293b',
+                  color: filter === 'all' ? '#fff' : '#94a3b8',
+                }}
+              >
+                Все ({report.summary.total_vulnerabilities})
+              </button>
+              {severities.filter(s => report.summary.by_severity[s]).map(sev => (
+                <button
+                  key={sev}
+                  onClick={() => setFilter(sev === filter ? 'all' : sev)}
+                  style={{
+                    padding: '6px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+                    background: filter === sev ? (SEV_COLOR[sev] + '44') : (SEV_COLOR[sev] + '22'),
+                    color: SEV_COLOR[sev],
+                    border: `1px solid ${SEV_COLOR[sev]}${filter === sev ? '99' : '44'}`,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {report.summary.by_severity[sev]} {SEV_LABEL[sev] ?? sev}
+                </button>
               ))}
             </div>
           </div>
@@ -236,23 +382,25 @@ export default function ReportPage() {
         {/* Vulnerabilities table */}
         <div style={card}>
           <h3 style={{ margin: '0 0 16px', fontSize: 15 }}>
-            Список уязвимостей ({report.summary.total_vulnerabilities})
+            Список уязвимостей ({visibleVulns.length}
+            {filter !== 'all' ? ` из ${report.summary.total_vulnerabilities}` : ''})
           </h3>
-          {report.vulnerabilities.length === 0 ? (
+          {visibleVulns.length === 0 ? (
             <p style={{ color: '#4ade80', margin: 0 }}>Уязвимостей не обнаружено.</p>
           ) : (
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 800 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
                 <thead>
                   <tr>
-                    {['Тип', 'Критичность', 'Уверенность', 'URL', 'Параметр', 'Метод', 'Рекомендация', ''].map((h, i) => (
+                    {['Тип', 'Критичность', 'Уверенность', 'CWE', 'URL', 'Параметр', 'Метод', ''].map((h, i) => (
                       <th key={i} style={th}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {report.vulnerabilities.map(v => {
+                  {visibleVulns.map(v => {
                     const isOpen = expanded.has(v.id)
+                    const cwe = v.evidence?.cwe ?? ''
                     return (
                       <Fragment key={v.id}>
                         <tr style={{ cursor: 'pointer' }} onClick={() => toggleRow(v.id)}>
@@ -263,7 +411,7 @@ export default function ReportPage() {
                               background: (SEV_COLOR[v.severity] ?? '#64748b') + '22',
                               color: SEV_COLOR[v.severity] ?? '#64748b',
                             }}>
-                              {v.severity.toUpperCase()}
+                              {(SEV_LABEL[v.severity] ?? v.severity).toUpperCase()}
                             </span>
                           </td>
                           <td style={td}>
@@ -275,22 +423,41 @@ export default function ReportPage() {
                               {v.confidence === 'high' ? 'высокая' : 'низкая'}
                             </span>
                           </td>
-                          <td style={{ ...td, fontFamily: 'monospace', fontSize: 11, color: '#94a3b8', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <td style={td}>
+                            {cwe ? (
+                              <a
+                                href={`https://cwe.mitre.org/data/definitions/${cwe.replace('CWE-', '')}.html`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                style={{
+                                  padding: '1px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                                  background: '#7c3aed22', color: '#a78bfa', border: '1px solid #7c3aed44',
+                                  textDecoration: 'none', display: 'inline-block',
+                                }}
+                              >
+                                {cwe}
+                              </a>
+                            ) : <span style={{ color: '#334155' }}>—</span>}
+                          </td>
+                          <td style={{ ...td, fontFamily: 'monospace', fontSize: 11, color: '#94a3b8', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {v.url}
                           </td>
                           <td style={{ ...td, color: '#94a3b8' }}>{v.parameter ?? '—'}</td>
                           <td style={{ ...td, color: '#94a3b8' }}>{v.method}</td>
-                          <td style={{ ...td, fontSize: 12, color: '#64748b', maxWidth: 250 }}>
-                            {v.recommendation ?? '—'}
-                          </td>
                           <td style={{ ...td, textAlign: 'center', color: '#64748b', fontSize: 14, width: 30 }}>
                             {isOpen ? '▲' : '▼'}
                           </td>
                         </tr>
                         {isOpen && (
                           <tr style={{ background: '#0f172a' }}>
-                            <td colSpan={8} style={{ padding: '10px 16px', borderBottom: '1px solid #1e293b' }}>
+                            <td colSpan={8} style={{ padding: '12px 16px', borderBottom: '1px solid #1e293b' }}>
                               <EvidenceDetails vuln={v} />
+                              {v.recommendation && (
+                                <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 6, background: '#1e293b', fontSize: 12, color: '#94a3b8', borderLeft: '3px solid #1e40af' }}>
+                                  <strong style={{ color: '#60a5fa' }}>Рекомендация:</strong> {v.recommendation}
+                                </div>
+                              )}
                             </td>
                           </tr>
                         )}

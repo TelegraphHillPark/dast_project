@@ -1,0 +1,62 @@
+name: Deploy to VDS
+
+on:
+  push:
+    branches: [main]
+
+# Требует успешного прохождения CI
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: []   # CI запускается отдельно; добавь "ci" если хочешь блокировку
+
+    environment:
+      name: production
+      url: https://${{ secrets.VDS_HOST }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Копируем docker-compose.prod.yml и .env.prod на сервер
+      - name: Upload compose file
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VDS_HOST }}
+          username: ${{ secrets.VDS_USER }}
+          key: ${{ secrets.VDS_SSH_KEY }}
+          port: ${{ secrets.VDS_PORT }}
+          source: "docker-compose.prod.yml,docker/nginx/nginx.prod.conf"
+          target: ${{ secrets.VDS_DEPLOY_PATH }}
+
+      # Запускаем деплой на сервере
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VDS_HOST }}
+          username: ${{ secrets.VDS_USER }}
+          key: ${{ secrets.VDS_SSH_KEY }}
+          port: ${{ secrets.VDS_PORT }}
+          script: |
+            set -e
+            cd ${{ secrets.VDS_DEPLOY_PATH }}
+
+            # Подтягиваем свежий код
+            git pull origin main
+
+            # Пересобираем и поднимаем
+            docker compose -f docker-compose.prod.yml pull --ignore-pull-failures
+            docker compose -f docker-compose.prod.yml build --no-cache
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+            # Применяем миграции БД
+            docker compose -f docker-compose.prod.yml exec -T backend alembic upgrade head
+
+            # Чистим старые образы
+            docker image prune -f
+
+            echo "Deploy finished at $(date)"

@@ -20,7 +20,17 @@ interface TokenItem {
   created_at: string
 }
 
-type Tab = 'users' | 'tokens'
+interface SessionItem {
+  id: string
+  user_id: string
+  username: string
+  ip_address: string | null
+  user_agent: string | null
+  created_at: string
+  expires_at: string
+}
+
+type Tab = 'users' | 'tokens' | 'sessions'
 
 export default function AdminPage() {
 
@@ -32,6 +42,10 @@ export default function AdminPage() {
   const [tokens, setTokens] = useState<TokenItem[]>([])
   const [tokensError, setTokensError] = useState('')
   const [tokensLoaded, setTokensLoaded] = useState(false)
+
+  const [sessions, setSessions] = useState<SessionItem[]>([])
+  const [sessionsError, setSessionsError] = useState('')
+  const [sessionsLoaded, setSessionsLoaded] = useState(false)
 
   useEffect(() => {
     api.get('/admin/users')
@@ -46,6 +60,19 @@ export default function AdminPage() {
         .catch(e => setTokensError(e.response?.data?.detail ?? 'Не удалось загрузить токены'))
     }
   }, [tab, tokensLoaded])
+
+  useEffect(() => {
+    if (tab === 'sessions' && !sessionsLoaded) {
+      api.get('/admin/sessions')
+        .then(r => { setSessions(r.data); setSessionsLoaded(true) })
+        .catch(e => setSessionsError(e.response?.data?.detail ?? 'Не удалось загрузить сессии'))
+    }
+  }, [tab, sessionsLoaded])
+
+  async function revokeSession(sessionId: string) {
+    await api.delete(`/admin/sessions/${sessionId}`)
+    setSessions(prev => prev.filter(s => s.id !== sessionId))
+  }
 
   async function toggleActive(user: UserItem) {
     await api.patch(`/admin/users/${user.id}`, { is_active: !user.is_active })
@@ -83,6 +110,7 @@ export default function AdminPage() {
         <div style={{ marginBottom: 0 }}>
           <button style={tabBtn(tab === 'users')} onClick={() => setTab('users')}>Пользователи</button>
           <button style={tabBtn(tab === 'tokens')} onClick={() => setTab('tokens')}>API-токены</button>
+          <button style={tabBtn(tab === 'sessions')} onClick={() => setTab('sessions')}>Сессии</button>
         </div>
 
         <div style={{ background: '#1e293b', borderRadius: '0 8px 8px 8px', padding: 24 }}>
@@ -176,6 +204,49 @@ export default function AdminPage() {
                   ))}
                   {tokens.length === 0 && !tokensError && (
                     <tr><td colSpan={6} style={{ ...td, color: '#94a3b8', textAlign: 'center' }}>Токенов нет</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </>
+          )}
+
+          {tab === 'sessions' && (
+            <>
+              <h2 style={{ marginBottom: 16, marginTop: 0 }}>Активные сессии</h2>
+              {sessionsError && <p style={{ color: '#f87171' }}>{sessionsError}</p>}
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    <th style={th}>Пользователь</th>
+                    <th style={th}>IP-адрес</th>
+                    <th style={th}>Клиент</th>
+                    <th style={th}>Создана</th>
+                    <th style={th}>Истекает</th>
+                    <th style={th}>Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessions.map(s => (
+                    <tr key={s.id} style={{ fontSize: 13 }}>
+                      <td style={td}>{s.username}</td>
+                      <td style={td}>{s.ip_address ?? '—'}</td>
+                      <td style={{ ...td, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#94a3b8' }}>
+                        {s.user_agent ?? '—'}
+                      </td>
+                      <td style={{ ...td, color: '#94a3b8' }}>{new Date(s.created_at).toLocaleString('ru-RU')}</td>
+                      <td style={{ ...td, color: '#94a3b8' }}>{new Date(s.expires_at).toLocaleString('ru-RU')}</td>
+                      <td style={td}>
+                        <button
+                          style={{ ...btn, background: '#7f1d1d', padding: '4px 12px', fontSize: 12 }}
+                          onClick={() => revokeSession(s.id)}
+                        >
+                          Отозвать
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {sessions.length === 0 && !sessionsError && (
+                    <tr><td colSpan={6} style={{ ...td, color: '#94a3b8', textAlign: 'center' }}>Активных сессий нет</td></tr>
                   )}
                 </tbody>
               </table>
