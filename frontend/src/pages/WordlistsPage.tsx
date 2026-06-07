@@ -50,7 +50,7 @@ export default function WordlistsPage() {
     } catch (err: any) {
       const status = err.response?.status
       if (status === 415) setUploadErr('Неверный тип файла. Разрешены только .txt файлы.')
-      else if (status === 413) setUploadErr('Файл слишком большой (лимит 1 ГБ).')
+      else if (status === 413) setUploadErr('Файл слишком большой.')
       else setUploadErr(err.response?.data?.detail ?? 'Ошибка загрузки')
     } finally {
       setUploadLoading(false)
@@ -88,7 +88,7 @@ export default function WordlistsPage() {
           <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>
             Загрузите текстовый файл (.txt) с полезными нагрузками — по одной на строку.
             Строки, начинающиеся с «#», считаются комментариями и пропускаются.
-            Максимальный размер: 1 ГБ.
+            Рекомендуемый размер: до 10 ГБ.
           </p>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <button
