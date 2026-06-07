@@ -2,7 +2,7 @@
 # Использование:
 #   cp .env.example .env.prod
 #   nano .env.prod          # заполни реальные значения
-#   docker compose -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 
 services:
 
@@ -108,13 +108,17 @@ services:
       dockerfile: docker/nginx/Dockerfile
     container_name: dast_nginx
     restart: unless-stopped
+    environment:
+      # Если домена нет — ставь белый IP или IP.nip.io
+      # Например: DOMAIN=1.2.3.4  или  DOMAIN=1.2.3.4.nip.io
+      DOMAIN: ${DOMAIN:-localhost}
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      # Let's Encrypt сертификаты (certbot пишет сюда)
-      - certbot_certs:/etc/letsencrypt:ro
-      - certbot_www:/var/www/certbot:ro
+      # Let's Encrypt сертификаты (certbot пишет сюда, nginx читает)
+      - certbot_certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
     depends_on:
       backend:
         condition: service_healthy
@@ -123,6 +127,7 @@ services:
       - dvwa_net
 
   # ── Certbot (обновление Let's Encrypt) ───────────────────────────────────────
+  # Используется только если у тебя есть домен или nip.io
   certbot:
     image: certbot/certbot:latest
     container_name: dast_certbot
@@ -130,7 +135,7 @@ services:
       - certbot_certs:/etc/letsencrypt
       - certbot_www:/var/www/certbot
     # Автообновление раз в 12 часов
-    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done"
+    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"
     networks:
       - dast_internal
 
