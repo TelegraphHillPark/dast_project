@@ -3,6 +3,7 @@ name: Deploy to VDS
 on:
   push:
     branches: [main]
+  workflow_dispatch:  # ручной запуск через GitHub UI
 
 # Требует успешного прохождения CI
 concurrency:
@@ -17,21 +18,9 @@ jobs:
 
     environment:
       name: production
-      url: https://${{ secrets.VDS_HOST }}
 
     steps:
       - uses: actions/checkout@v4
-
-      # Копируем docker-compose.prod.yml и .env.prod на сервер
-      - name: Upload compose file
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.VDS_HOST }}
-          username: ${{ secrets.VDS_USER }}
-          key: ${{ secrets.VDS_SSH_KEY }}
-          port: ${{ secrets.VDS_PORT }}
-          source: "docker-compose.prod.yml,docker/nginx/nginx.prod.conf"
-          target: ${{ secrets.VDS_DEPLOY_PATH }}
 
       # Запускаем деплой на сервере
       - name: Deploy via SSH
