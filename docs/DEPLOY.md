@@ -1,365 +1,290 @@
-# Руководство по развёртыванию — DAST Analyzer
+# Руководство по настройке и запуску дистрибутива ПО — DAST Analyzer
 
-## Содержание
+## 1. Общие сведения
 
-1. [Требования](#1-требования)
-2. [Локальный запуск](#2-локальный-запуск)
-3. [Развёртывание на сервере](#3-развёртывание-на-сервере)
-4. [TLS-сертификат (Certbot)](#4-tls-сертификат-certbot)
-5. [Первоначальная настройка](#5-первоначальная-настройка)
-6. [Обслуживание](#6-обслуживание)
-7. [Резервное копирование](#7-резервное-копирование)
-8. [CI/CD автодеплой](#8-cicd-автодеплой)
+Настоящее руководство описывает порядок развёртывания и запуска системы DAST Analyzer на сервере эксплуатации под управлением операционной системы Ubuntu 22.04 LTS. Все компоненты системы функционируют в виде Docker-контейнеров, управляемых посредством Docker Compose.
 
 ---
 
-## 1. Требования
+## 2. Требования к серверу эксплуатации
 
-### Обязательное ПО
-
-- **Docker** 24.x или новее
-- **Docker Compose** v2 (`docker compose`, не `docker-compose`)
-- **Node.js** 20 LTS + npm — нужен только один раз для сборки фронтенда
-
-Проверить:
-```bash
-docker --version          # Docker version 24.x
-docker compose version    # Docker Compose version v2.x
-node --version            # v20.x
-```
-
-### Сервер (для продакшена)
-
-| Параметр | Минимум | Рекомендуется |
-|---|---|---|
-| ОС | Ubuntu 22.04 LTS | Ubuntu 24.04 LTS |
-| CPU | 2 vCPU | 4 vCPU |
-| RAM | 4 ГБ | 8 ГБ |
-| Диск | 20 ГБ SSD | 50 ГБ SSD |
-| Порты | 80, 443 | 80, 443 |
+| Параметр | Минимальные требования |
+|---|---|
+| Операционная система | Ubuntu 22.04 LTS (64-bit) |
+| Процессор | 2 ядра, тактовая частота от 2 ГГц |
+| Оперативная память | 4 ГБ |
+| Дисковое пространство | 20 ГБ |
+| Сетевой интерфейс | Публичный IPv4-адрес |
+| Открытые порты | 80/tcp, 443/tcp, 8888/tcp |
 
 ---
 
-## 2. Локальный запуск
+## 3. Требования к программному обеспечению
 
-```bash
-# 1. Клонировать
-git clone https://github.com/TelegraphHillPark/dast_project.git
-cd dast_project
+На сервере эксплуатации должно быть установлено следующее программное обеспечение:
 
-# 2. Настроить .env
-cp .env.example .env
-```
-
-Открыть `.env` и задать:
-
-```env
-POSTGRES_PASSWORD=местный_пароль_для_разработки
-REDIS_PASSWORD=местный_redis_пароль
-SECRET_KEY=минимум_32_случайных_символа_здесь_1234
-ENVIRONMENT=development
-ALLOWED_ORIGINS=http://localhost,https://localhost
-```
-
-```bash
-# 3. Собрать фронтенд
-cd frontend
-npm install
-npm run build
-cd ..
-
-# 4. Поднять всё
-docker compose up --build -d
-
-# 5. Миграции
-docker compose exec backend alembic upgrade head
-```
-
-Приложение: **https://localhost** (самоподписанный сертификат — нажмите «Перейти всё равно»).  
-Swagger: **https://localhost/api/docs** (только при `ENVIRONMENT=development`).
+- Docker Engine версии 24.0 или выше;
+- Docker Compose Plugin версии 2.20 или выше;
+- Git версии 2.34 или выше.
 
 ---
 
-## 3. Развёртывание на сервере
-
-### 3.1 Подготовка сервера
+## 4. Установка Docker
 
 ```bash
-# Установить Docker (Ubuntu)
+# Загрузка и выполнение официального скрипта установки Docker
 curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-# Перелогиниться
 
-# Проверить
+# Включение автоматического запуска Docker при старте системы
+systemctl enable --now docker
+
+# Проверка корректности установки
+docker --version
 docker compose version
 ```
 
-### 3.2 Получить код
+---
+
+## 5. Подготовка сервера эксплуатации
+
+### 5.1 Создание непривилегированного пользователя
 
 ```bash
-git clone https://github.com/TelegraphHillPark/dast_project.git
-cd dast_project
+# Создание пользователя для эксплуатации приложения
+adduser deploy
+usermod -aG docker deploy
+
+# Переключение на созданного пользователя
+su - deploy
 ```
 
-### 3.3 Настроить .env
+### 5.2 Клонирование репозитория
+
+```bash
+git clone https://github.com/<организация>/<репозиторий>.git /home/deploy/dast
+cd /home/deploy/dast
+```
+
+---
+
+## 6. Настройка переменных окружения
 
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-Минимальный набор для продакшена:
+В файле `.env` необходимо указать следующие параметры:
 
-```env
-POSTGRES_DB=dast
-POSTGRES_USER=dast
-POSTGRES_PASSWORD=сгенерируйте_надёжный_пароль_минимум_20_символов
-REDIS_PASSWORD=ещё_один_надёжный_пароль
+| Параметр | Описание |
+|---|---|
+| `POSTGRES_PASSWORD` | Пароль к базе данных PostgreSQL |
+| `REDIS_PASSWORD` | Пароль к серверу Redis |
+| `SECRET_KEY` | Секретный ключ для подписи JWT-токенов (рекомендуется длина 64 символа) |
+| `DOMAIN` | Доменное имя или IP-адрес сервера |
+| `FRONTEND_URL` | Публичный URL приложения (например: `https://example.com`) |
+| `ALLOWED_ORIGINS` | Список разрешённых источников CORS через запятую |
+| `GITHUB_CLIENT_ID` | Client ID приложения GitHub OAuth (если используется) |
+| `GITHUB_CLIENT_SECRET` | Client Secret приложения GitHub OAuth (если используется) |
 
-SECRET_KEY=случайная_строка_минимум_32_символа_openssl_rand_hex_32
-ENVIRONMENT=production
-ALLOWED_ORIGINS=https://ваш-домен.com
-FRONTEND_URL=https://ваш-домен.com
+Генерация `SECRET_KEY`:
 
-# OAuth GitHub (опционально)
-GITHUB_CLIENT_ID=
-GITHUB_CLIENT_SECRET=
-```
-
-Для генерации `SECRET_KEY`:
 ```bash
 openssl rand -hex 32
 ```
 
-### 3.4 Собрать фронтенд
+**Примечание по переменной `DOMAIN`:**
 
-```bash
-cd frontend
-npm install
-npm run build
-cd ..
-```
-
-### 3.5 Запустить
-
-```bash
-docker compose up --build -d
-docker compose exec backend alembic upgrade head
-```
-
-Проверить что всё поднялось:
-
-```bash
-docker compose ps
-# Все сервисы должны быть в состоянии "running" или "healthy"
-
-curl -k https://localhost/health
-# {"status":"ok","version":"0.4.0"}
-```
+| Значение | Поведение |
+|---|---|
+| IP-адрес (например: `1.2.3.4`) | Nginx генерирует самоподписанный сертификат |
+| IP-адрес с суффиксом `.nip.io` (например: `1.2.3.4.nip.io`) | Возможно получение сертификата Let's Encrypt |
+| Доменное имя (например: `example.com`) | Полноценная конфигурация с сертификатом Let's Encrypt |
 
 ---
 
-## 4. TLS-сертификат (Certbot)
-
-По умолчанию Nginx использует самоподписанный сертификат из `docker/nginx/certs/`. Для продакшена нужен нормальный — Certbot получит его бесплатно от Let's Encrypt.
-
-### 4.1 Установить Certbot
+## 7. Первоначальный запуск системы
 
 ```bash
-sudo apt install certbot
+# Сборка и запуск всех контейнеров
+docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+
+# Ожидание запуска сервиса backend (30–60 секунд)
+docker compose -f docker-compose.prod.yml logs -f backend
 ```
 
-### 4.2 Получить сертификат
-
-Перед этим убедитесь, что порт 80 открыт и ваш домен указывает на сервер. Временно остановить Nginx:
+### 7.1 Применение миграций базы данных
 
 ```bash
-docker compose stop nginx
+docker compose -f docker-compose.prod.yml --env-file .env \
+    exec backend alembic upgrade head
 ```
 
-Получить сертификат (standalone-режим):
+### 7.2 Создание учётной записи администратора
 
 ```bash
-sudo certbot certonly --standalone -d ваш-домен.com
+docker compose -f docker-compose.prod.yml --env-file .env \
+    exec backend python -c "
+import asyncio
+from app.database import AsyncSessionLocal
+from app.models.user import User, UserRole
+from app.core.security import hash_password
+from app.core.uuid7 import uuid7_str
+
+async def run():
+    async with AsyncSessionLocal() as s:
+        s.add(User(
+            id=uuid7_str(),
+            email='admin@example.com',
+            username='admin',
+            hashed_password=hash_password('SECURE_PASSWORD'),
+            role=UserRole.admin,
+            is_active=True
+        ))
+        await s.commit()
+        print('Учётная запись администратора создана.')
+
+asyncio.run(run())
+"
 ```
 
-Файлы окажутся в `/etc/letsencrypt/live/ваш-домен.com/`.
-
-### 4.3 Скопировать сертификат в проект
-
-```bash
-sudo cp /etc/letsencrypt/live/ваш-домен.com/fullchain.pem docker/nginx/certs/server.crt
-sudo cp /etc/letsencrypt/live/ваш-домен.com/privkey.pem docker/nginx/certs/server.key
-sudo chown $USER:$USER docker/nginx/certs/server.*
-```
-
-### 4.4 Обновить конфиг Nginx
-
-Откройте `docker/nginx/nginx.conf` и замените `server_name localhost;` на ваш домен:
-
-```nginx
-server_name ваш-домен.com;
-```
-
-### 4.5 Пересобрать и запустить Nginx
-
-```bash
-docker compose build nginx
-docker compose up -d nginx
-```
-
-### 4.6 Автообновление сертификата
-
-Let's Encrypt сертификаты действуют 90 дней. Добавьте cron для обновления:
-
-```bash
-sudo crontab -e
-```
-
-Добавить строку (обновляет ежемесячно):
-
-```
-0 3 1 * * docker compose -f /путь/к/проекту/docker-compose.yml stop nginx && certbot renew --standalone && cp /etc/letsencrypt/live/ваш-домен.com/fullchain.pem /путь/к/проекту/docker/nginx/certs/server.crt && cp /etc/letsencrypt/live/ваш-домен.com/privkey.pem /путь/к/проекту/docker/nginx/certs/server.key && docker compose -f /путь/к/проекту/docker-compose.yml build nginx && docker compose -f /путь/к/проекту/docker-compose.yml up -d nginx
-```
+Значения `admin@example.com` и `SECURE_PASSWORD` необходимо заменить на фактические.
 
 ---
 
-## 5. Первоначальная настройка
+## 8. Получение TLS-сертификата Let's Encrypt
 
-### Создать первого администратора
-
-После первого запуска и регистрации первого пользователя — назначьте ему роль администратора:
+Данный раздел применим при использовании доменного имени или адреса `*.nip.io`.
 
 ```bash
-docker compose exec db psql -U dast dast \
-  -c "UPDATE users SET role='admin' WHERE email='ваш@email.com';"
+# Получение сертификата (заменить DOMAIN и EMAIL на фактические значения)
+docker compose -f docker-compose.prod.yml --env-file .env \
+    run --rm --entrypoint certbot certbot \
+    certonly --webroot -w /var/www/certbot \
+    -d DOMAIN \
+    --email EMAIL \
+    --agree-tos --no-eff-email
+
+# Перезапуск nginx для применения сертификата
+docker compose -f docker-compose.prod.yml --env-file .env restart nginx
 ```
 
-После этого через панель `/admin` можно повышать роли других пользователей без прямого доступа к БД.
+**Настройка автоматического обновления сертификата.** Необходимо добавить задание в планировщик cron:
 
-### Настроить OAuth GitHub (опционально)
+```bash
+crontab -e
+```
 
-1. На GitHub: Settings → Developer settings → OAuth Apps → New OAuth App
-2. Authorization callback URL: `https://ваш-домен.com/api/auth/oauth/github/callback`
-3. Скопировать Client ID и Client Secret в `.env`
-4. Перезапустить backend: `docker compose restart backend`
+Добавить следующую строку:
+
+```
+0 3 * * * cd /home/deploy/dast && docker compose -f docker-compose.prod.yml --env-file .env exec -T certbot certbot renew --webroot -w /var/www/certbot --quiet && docker compose -f docker-compose.prod.yml --env-file .env exec -T nginx nginx -s reload
+```
+
+Задание выполняется ежедневно в 03:00. Certbot производит обновление только при наличии менее 30 суток до истечения срока действия сертификата.
 
 ---
 
-## 6. Обслуживание
+## 9. Настройка GitHub OAuth (опционально)
 
-### Просмотр логов
+Для активации возможности входа через GitHub необходимо:
 
-```bash
-# Все сервисы
-docker compose logs -f
-
-# Конкретный сервис
-docker compose logs -f backend
-docker compose logs -f worker
-docker compose logs -f nginx
-
-# Последние 100 строк
-docker compose logs --tail=100 backend
-```
-
-### Перезапуск сервиса
-
-```bash
-docker compose restart backend
-docker compose restart worker
-```
-
-### Обновление приложения
-
-```bash
-git pull
-cd frontend && npm install && npm run build && cd ..
-docker compose up --build -d
-docker compose exec backend alembic upgrade head
-```
-
-### Применить миграции вручную
-
-```bash
-# Посмотреть текущую версию
-docker compose exec backend alembic current
-
-# Применить все миграции
-docker compose exec backend alembic upgrade head
-
-# Откатить последнюю
-docker compose exec backend alembic downgrade -1
-```
-
-### Очистить Docker-артефакты
-
-```bash
-# Удалить неиспользуемые образы
-docker image prune -f
-
-# Удалить всё неиспользуемое (осторожно)
-docker system prune -f
-```
+1. Создать OAuth Application по адресу: `https://github.com/settings/developers → OAuth Apps → New OAuth App`.
+2. Указать следующие параметры:
+   - **Homepage URL:** `https://DOMAIN`
+   - **Authorization callback URL:** `https://DOMAIN/api/auth/oauth/github/callback`
+3. Сохранить `Client ID` и `Client Secret`.
+4. Прописать значения в `.env`:
+   ```
+   GITHUB_CLIENT_ID=<значение>
+   GITHUB_CLIENT_SECRET=<значение>
+   ```
+5. Перезапустить контейнер backend.
 
 ---
 
-## 7. Резервное копирование
+## 10. Проверка работоспособности
 
-### Бэкап базы данных
+После успешного запуска система доступна по следующим адресам:
 
-```bash
-docker compose exec db pg_dump -U dast dast | gzip > backup_$(date +%Y%m%d_%H%M%S).sql.gz
-```
-
-### Восстановление
-
-```bash
-gunzip -c backup_20260101_120000.sql.gz | docker compose exec -T db psql -U dast dast
-```
-
-### Бэкап загруженных файлов (аватары, словари)
-
-```bash
-docker run --rm -v dast_project_uploads_data:/data -v $(pwd):/backup \
-  alpine tar czf /backup/uploads_$(date +%Y%m%d).tar.gz /data
-```
-
-> Данные PostgreSQL и Redis хранятся в Docker volumes `postgres_data` и `redis_data`. При `docker compose down -v` они **удаляются** — делайте бэкап перед этой командой.
+| Адрес | Описание |
+|---|---|
+| `https://DOMAIN` | Основной веб-интерфейс |
+| `https://DOMAIN/api/docs` | Интерактивная документация REST API (Swagger UI) |
+| `https://DOMAIN/health` | Эндпоинт проверки состояния |
+| `http://DOMAIN:8888` | Уязвимое веб-приложение DVWA (для тестирования) |
 
 ---
 
-## 8. CI/CD автодеплой
+## 11. Настройка CI/CD (непрерывная интеграция и развёртывание)
 
-Конфигурация в `.github/workflows/ci.yml`. При пуше тега `v*.*.*` запускается автоматический деплой.
+### 11.1 Переменные GitHub Actions Secrets
 
-### Необходимые секреты в GitHub
+В репозитории GitHub необходимо настроить следующие секреты (`Settings → Secrets and variables → Actions`):
 
 | Секрет | Описание |
 |---|---|
-| `SSH_PRIVATE_KEY` | Приватный SSH-ключ для подключения к серверу |
-| `DEPLOY_HOST` | IP или домен сервера |
-| `DEPLOY_USER` | Пользователь SSH |
-| `DEPLOY_PATH` | Путь к папке проекта на сервере |
+| `VDS_HOST` | IP-адрес сервера эксплуатации |
+| `VDS_USER` | Имя пользователя SSH |
+| `VDS_SSH_KEY` | Приватный SSH-ключ (полное содержимое файла) |
+| `VDS_PORT` | Порт SSH |
+| `VDS_DEPLOY_PATH` | Путь к директории проекта на сервере |
+| `SONAR_TOKEN` | Токен для SonarCloud SAST |
 
-### Настройка SSH-доступа
+### 11.2 Автоматическое развёртывание
 
-На сервере:
+При отправке изменений в ветку `main` автоматически запускается pipeline, выполняющий:
+1. Запуск тестов backend (pytest).
+2. Сборку и проверку типов frontend (TypeScript).
+3. Статический анализ кода (SonarCloud).
+4. Сканирование Docker-образа (Trivy).
+5. Развёртывание на сервере эксплуатации по SSH.
+
+### 11.3 Выпуск версионированного дистрибутива
+
+Создание нового релиза выполняется посредством Git-тега:
+
 ```bash
-# Создать ключ для деплоя (если нет)
-ssh-keygen -t ed25519 -f ~/.ssh/deploy_key -N ""
-
-# Добавить публичный ключ в authorized_keys
-cat ~/.ssh/deploy_key.pub >> ~/.ssh/authorized_keys
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
-Содержимое `~/.ssh/deploy_key` (приватный ключ) добавить в GitHub Secrets как `SSH_PRIVATE_KEY`.
+При создании тега pipeline дополнительно выполняет:
+- публикацию Docker-образов в GitHub Container Registry (GHCR);
+- создание GitHub Release с автоматически сгенерированными примечаниями к выпуску.
 
-### Деплой вручную
+---
+
+## 12. Основные команды управления
 
 ```bash
-git tag v0.4.1
-git push origin v0.4.1
+# Просмотр статуса контейнеров
+docker compose -f docker-compose.prod.yml ps
+
+# Просмотр журналов конкретного сервиса
+docker compose -f docker-compose.prod.yml logs -f <имя_сервиса>
+
+# Перезапуск отдельного сервиса
+docker compose -f docker-compose.prod.yml restart <имя_сервиса>
+
+# Остановка всех контейнеров
+docker compose -f docker-compose.prod.yml down
+
+# Создание резервной копии базы данных
+docker compose -f docker-compose.prod.yml exec db \
+    pg_dump -U dast dast > backup_$(date +%Y%m%d_%H%M%S).sql
+
+# Очистка неиспользуемых образов
+docker image prune -f
 ```
 
-После этого CI автоматически: запустит тесты → соберёт Docker образ → просканирует Trivy → задеплоит на сервер.
+---
+
+## 13. Устранение типовых неисправностей
+
+| Симптом | Возможная причина | Действие |
+|---|---|---|
+| Контейнер backend не запускается | Ошибка подключения к PostgreSQL | Убедиться, что контейнер `db` запущен и принимает соединения (`docker compose logs db`) |
+| Ошибка 502 Bad Gateway в браузере | Контейнер backend не отвечает | Проверить журналы: `docker compose logs backend` |
+| Предупреждение браузера о сертификате | Используется самоподписанный сертификат | Получить сертификат Let's Encrypt согласно разделу 8 |
+| Ошибка применения миграций | БД недоступна или схема повреждена | Проверить переменную `DATABASE_URL` в `.env` |

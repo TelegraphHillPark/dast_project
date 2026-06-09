@@ -51,6 +51,7 @@ export default function DashboardPage() {
   }, [scans])
 
   const btn: React.CSSProperties = {
+    minHeight: 44, minWidth: 44,
     padding: '6px 14px', background: '#1e40af', color: '#fff',
     border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer',
   }

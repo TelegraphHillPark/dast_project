@@ -72,6 +72,7 @@ export default function WordlistsPage() {
     background: '#1e293b', borderRadius: 10, padding: 24, marginBottom: 20,
   }
   const btn: React.CSSProperties = {
+    minHeight: 44, minWidth: 44,
     padding: '7px 16px', background: '#1e40af', color: '#fff',
     border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer',
   }

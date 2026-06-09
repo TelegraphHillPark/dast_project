@@ -69,6 +69,7 @@ export default function LoginPage() {
     color: '#f1f5f9', fontSize: 14, boxSizing: 'border-box',
   }
   const btn: React.CSSProperties = {
+    minHeight: 44, minWidth: 44,
     width: '100%', padding: '10px 0',
     background: '#2563eb', color: '#fff', border: 'none',
     borderRadius: 6, fontSize: 15, fontWeight: 600, cursor: 'pointer',

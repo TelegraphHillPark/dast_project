@@ -212,6 +212,7 @@ export default function ProfilePage() {
     color: '#f1f5f9', fontSize: 14, boxSizing: 'border-box',
   }
   const btn: React.CSSProperties = {
+    minHeight: 44, minWidth: 44,
     padding: '8px 20px', background: '#1e40af', color: '#fff',
     border: 'none', borderRadius: 6, fontSize: 14, cursor: 'pointer',
   }
