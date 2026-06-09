@@ -117,20 +117,26 @@ class ScanOrchestrator:
                 await self._run_attacks(scan, result)
 
             if self._stop_event.is_set():
-                if self._cancelled:
-                    scan.status = ScanStatus.cancelled
-                    scan.finished_at = datetime.now(timezone.utc)
-                    await slog(scan.id, "Сканирование остановлено пользователем.", "info")
-                else:
-                    scan.status = ScanStatus.paused
-                    await slog(scan.id, "Сканирование приостановлено.", "info")
+                # The API already wrote paused/cancelled to the DB — don't overwrite.
+                # (Overwriting would race with a concurrent resume that sets status=pending.)
+                # Just flush any pending vulnerability rows.
+                await self.db.commit()
+                msg = (
+                    "Сканирование остановлено пользователем."
+                    if self._cancelled
+                    else "Сканирование приостановлено."
+                )
+                await slog(scan.id, msg, "info")
+                logger.info(
+                    "Scan %s stopped (cancelled=%s), status left to API",
+                    scan.id, self._cancelled,
+                )
             else:
                 scan.status = ScanStatus.finished
                 scan.finished_at = datetime.now(timezone.utc)
+                await self.db.commit()
                 await slog(scan.id, "Сканирование завершено.", "info")
-
-            await self.db.commit()
-            logger.info("Scan %s finished with status=%s", scan.id, scan.status)
+                logger.info("Scan %s finished with status=%s", scan.id, scan.status)
 
         except asyncio.TimeoutError:
             scan.status = ScanStatus.failed

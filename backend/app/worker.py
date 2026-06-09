@@ -45,7 +45,10 @@ async def process_scan(scan_id: str) -> None:
         try:
             await orchestrator.run()
         finally:
-            _running.pop(scan_id, None)
+            # Only remove if this is still the current orchestrator —
+            # a concurrent resume may have already registered a newer one.
+            if _running.get(scan_id) is orchestrator:
+                _running.pop(scan_id, None)
 
 
 async def check_pause_signals() -> None:
